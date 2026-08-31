@@ -1,0 +1,15 @@
+# ── secrets — never leave the machine ──
+.api_token
+brain_config.json
+
+# ── private captures & runtime logs ──
+cortex_shots/
+skeleton_snapshots/
+_research/*.log
+_research/*.jpg
+_research/*.png
+temp/
+
+# ── python cruft ──
+__pycache__/
+*.pyc

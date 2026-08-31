@@ -1,0 +1,5 @@
+[*] DroidCommand v3.0 console: http://127.0.0.1:5000
+[*] API token stored at C:\Users\PC\OneDrive\Desktop\New folder\DroidCommand\.api_token
+[*] API is local-only + token-gated. The web UI picks up the token automatically.
+ * Serving Flask app 'app'
+ * Debug mode: off

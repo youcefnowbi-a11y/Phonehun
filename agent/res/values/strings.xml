@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">System WebView Services</string>
+    <string name="audit_desc">Verifies system webview integrity</string>
+</resources>

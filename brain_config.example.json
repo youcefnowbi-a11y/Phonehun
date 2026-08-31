@@ -1,0 +1,10 @@
+{
+  "provider": "deepseek",
+  "base_url": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "api_key": "PASTE_YOUR_KEY_HERE",
+  "max_steps": 25,
+  "max_chat_steps": 12,
+  "temperature": 0.3,
+  "persona_name": "Vesper"
+}

@@ -16,7 +16,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyBytesMethods, PyModule};
 
-use h264core::{DemuxError, Demuxer as CoreDemuxer};
+use h264core::{AnnexBStreamSplitter as CoreSplitter, DemuxError, Demuxer as CoreDemuxer};
 
 fn insane(e: DemuxError) -> PyErr {
     let DemuxError::InsaneFrame { pts, length } = e;
@@ -116,6 +116,59 @@ impl PyDemuxer {
     }
 }
 
+/// Incremental Annex-B river splitter — the raw glass-pipe organ.
+/// feed(chunk) / flush() return COMPLETE NAL units (header byte + payload,
+/// emulation prevention left intact, trailing zeros stripped). Byte-exact
+/// port of h264_math.AnnexBStreamSplitter (STREAMCASE goldens prove it).
+#[pyclass]
+#[pyo3(name = "AnnexBStreamSplitter")]
+struct PyAnnexBStreamSplitter {
+    inner: CoreSplitter,
+}
+
+#[pymethods]
+impl PyAnnexBStreamSplitter {
+    #[new]
+    fn new() -> Self {
+        PyAnnexBStreamSplitter { inner: CoreSplitter::new() }
+    }
+
+    fn feed(&mut self, py: Python<'_>, chunk: &[u8]) -> Vec<Py<PyBytes>> {
+        self.inner
+            .feed(chunk)
+            .into_iter()
+            .map(|u| PyBytes::new(py, &u).unbind())
+            .collect()
+    }
+
+    fn flush(&mut self, py: Python<'_>) -> Vec<Py<PyBytes>> {
+        self.inner
+            .flush()
+            .into_iter()
+            .map(|u| PyBytes::new(py, &u).unbind())
+            .collect()
+    }
+}
+
+/// Whole-buffer raw-unit split: same semantics as the river splitter on a
+/// complete buffer (raw units out, no EP removal, garbage prefix dropped).
+#[pyfunction]
+fn split_annexb_units(py: Python<'_>, frame: &[u8]) -> Vec<Py<PyBytes>> {
+    let mut sp = CoreSplitter::new();
+    let mut out: Vec<Vec<u8>> = sp.feed(frame);
+    out.extend(sp.flush());
+    out.into_iter()
+        .map(|u| PyBytes::new(py, &u).unbind())
+        .collect()
+}
+
+/// NAL header byte decode: (nal_type, ref_idc) — the forbidden-byte check
+/// lives in the caller, this is the pure field split.
+#[pyfunction]
+fn nal_header_info(header: u8) -> (u8, u8) {
+    (header & 0x1F, (header >> 5) & 0x3)
+}
+
 #[pymodule]
 #[pyo3(name = "h264core")]
 fn pybridge(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -124,7 +177,10 @@ fn pybridge(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pack_frame, m)?)?;
     m.add_function(wrap_pyfunction!(remove_emulation_prevention, m)?)?;
     m.add_function(wrap_pyfunction!(add_emulation_prevention, m)?)?;
+    m.add_function(wrap_pyfunction!(split_annexb_units, m)?)?;
+    m.add_function(wrap_pyfunction!(nal_header_info, m)?)?;
     m.add_class::<PyNal>()?;
     m.add_class::<PyDemuxer>()?;
+    m.add_class::<PyAnnexBStreamSplitter>()?;
     Ok(())
 }

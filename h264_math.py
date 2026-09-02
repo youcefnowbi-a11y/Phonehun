@@ -162,6 +162,13 @@ def add_emulation_prevention(rbsp: bytes) -> bytes:
     return bytes(out)
 
 
+# Oracle aliases: pure implementations under graft. split_nals/is_keyframe
+# resolve these names at CALL time, so the oracle stays pure even in a
+# process where the graft has rebound the public globals to Rust.
+_py_remove_emulation_prevention = remove_emulation_prevention
+_py_add_emulation_prevention = add_emulation_prevention
+
+
 def split_nals(frame: bytes):
     """Split an Annex-B payload into NAL units, emulation removed.
 
@@ -195,7 +202,7 @@ def split_nals(frame: bytes):
         nal_type = header & 0x1F
         ref_idc = (header >> 5) & 0x3
         # trailing zeros are delimiters, not NAL content (trailing_zero_8bits)
-        rbsp = remove_emulation_prevention(unit[1:]).rstrip(b"\x00")
+        rbsp = _py_remove_emulation_prevention(unit[1:]).rstrip(b"\x00")
         nals.append((nal_type, ref_idc, rbsp))
     return nals
 
@@ -209,7 +216,11 @@ NAL_PPS = 8
 
 def is_keyframe(frame: bytes) -> bool:
     """A frame carrying an IDR slice is a keyframe."""
-    return any(t == NAL_SLICE_IDR for t, _, _ in split_nals(frame))
+    return any(t == NAL_SLICE_IDR for t, _, _ in _py_split_nals(frame))
+
+
+_py_split_nals = split_nals
+_py_is_keyframe = is_keyframe
 
 
 class AnnexBStreamSplitter:
@@ -274,6 +285,9 @@ class AnnexBStreamSplitter:
                 emit(bytes(b))
             self._buf.clear()
         return out
+
+
+_py_AnnexBStreamSplitter = AnnexBStreamSplitter
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +467,9 @@ class H264FrameDemuxer:
         if len(payload) == 0 or len(payload) > H264FrameDemuxer.MAX_SANE_FRAME:
             raise ValueError("bad payload length")
         return H264FrameDemuxer.HEADER.pack(pts, len(payload)) + payload
+
+
+_py_H264FrameDemuxer = H264FrameDemuxer
 
 
 # ---------------------------------------------------------------------------
@@ -638,38 +655,65 @@ def selftest() -> int:
 # Set DROID_H264_PURE=1 to force the pure path (used by the golden generator).
 # ---------------------------------------------------------------------------
 
-_py_split_nals = split_nals
-_py_is_keyframe = is_keyframe
-_py_H264FrameDemuxer = H264FrameDemuxer
-
 _RUST_HEART = False
 if os.environ.get("DROID_H264_PURE") != "1":
     try:
         import h264core as _rust
 
-        def split_nals(frame: bytes):
-            return [(n.nal_type, n.ref_idc, bytes(n.rbsp)) for n in _rust.split_nals(frame)]
+        # Full-heart-or-nothing: every grafted name must exist in the loaded
+        # pyd. A stale h264core.pyd must not leave a chimera — half Rust,
+        # half pure — with _RUST_HEART lying about it. Probe ALL, then bind.
+        _NEEDS = (
+            "split_nals", "is_keyframe", "pack_frame",
+            "remove_emulation_prevention", "add_emulation_prevention",
+            "Demuxer", "AnnexBStreamSplitter",
+        )
+        if all(hasattr(_rust, _n) for _n in _NEEDS):
 
-        def is_keyframe(frame: bytes) -> bool:
-            return _rust.is_keyframe(frame)
+            def split_nals(frame: bytes):
+                return [(n.nal_type, n.ref_idc, bytes(n.rbsp))
+                        for n in _rust.split_nals(frame)]
 
-        class H264FrameDemuxer:  # noqa: N801 - mirrors the pure class API
-            HEADER = _py_H264FrameDemuxer.HEADER
-            MAX_SANE_FRAME = _py_H264FrameDemuxer.MAX_SANE_FRAME
+            def is_keyframe(frame: bytes) -> bool:
+                return _rust.is_keyframe(frame)
 
-            __slots__ = ("_d",)
+            def remove_emulation_prevention(rbsp_payload: bytes) -> bytes:
+                return _rust.remove_emulation_prevention(rbsp_payload)
 
-            def __init__(self):
-                self._d = _rust.Demuxer()
+            def add_emulation_prevention(rbsp: bytes) -> bytes:
+                return _rust.add_emulation_prevention(rbsp)
 
-            def feed(self, chunk: bytes):
-                return self._d.feed(chunk)
+            class H264FrameDemuxer:  # noqa: N801 - mirrors the pure class API
+                HEADER = _py_H264FrameDemuxer.HEADER
+                MAX_SANE_FRAME = _py_H264FrameDemuxer.MAX_SANE_FRAME
 
-            @staticmethod
-            def pack_frame(pts: int, payload: bytes) -> bytes:
-                return _rust.pack_frame(pts, payload)
+                __slots__ = ("_d",)
 
-        _RUST_HEART = True
+                def __init__(self):
+                    self._d = _rust.Demuxer()
+
+                def feed(self, chunk: bytes):
+                    return self._d.feed(chunk)
+
+                @staticmethod
+                def pack_frame(pts: int, payload: bytes) -> bytes:
+                    return _rust.pack_frame(pts, payload)
+
+            class AnnexBStreamSplitter:  # noqa: N801 - mirrors the pure API
+                """Graft: the glass pipe runs the Rust river splitter."""
+
+                __slots__ = ("_s",)
+
+                def __init__(self):
+                    self._s = _rust.AnnexBStreamSplitter()
+
+                def feed(self, chunk: bytes):
+                    return self._s.feed(chunk)
+
+                def flush(self):
+                    return self._s.flush()
+
+            _RUST_HEART = True
     except ImportError:
         _RUST_HEART = False
 

@@ -92,6 +92,39 @@ def main():
     bad1 = (12345).to_bytes(8, "big") + (32 * 1024 * 1024).to_bytes(4, "big")
     emit_demux(L, [bad1], expect_err=(12345, 32 * 1024 * 1024))
 
+    # 8. STREAMCASEs: incremental AnnexBStreamSplitter, per-chunk emissions.
+    from h264_math import AnnexBStreamSplitter
+
+    def emit_stream(chunks):
+        L.append("STREAMCASE")
+        sp = AnnexBStreamSplitter()
+        for c in chunks:
+            L.append(f"CHUNK {hexs(c)}")
+            for emitted in sp.feed(c):
+                L.append(f"EMIT {hexs(emitted)}")
+        L.append("FLUSH")
+        for emitted in sp.flush():
+            L.append(f"EMIT {hexs(emitted)}")
+        L.append("ENDSTREAM")
+
+    body = (b"\x00\x00\x00\x01" + b"\x67\x42\x43" + b"\xA1\x02\x03"
+            + b"\x00\x00\x01" + b"\x65\x11\x22\x33"
+            + b"\x00\x00\x00\x01" + b"\x41\x99\x88\x00\x00")  # trailing zeros
+    # 8a. torn at every single byte (cruel)
+    emit_stream([body[i:i + 1] for i in range(len(body))])
+    # 8b. torn at 3 bytes (crueler than the selftest's own torture)
+    emit_stream([body[i:i + 3] for i in range(0, len(body), 3)])
+    # 8c. garbage prefix before the first code of the stream
+    emit_stream([b"JUNK\x00\x00", body[:10], body[10:]])
+    # 8d. 4-byte code only, split inside the code itself
+    emit_stream([b"\x00\x00", b"\x00\x01\x68\xEE", b"\xAA"])
+    # 8e. no start codes at all -> nothing ever, even flushed
+    emit_stream([b"\x01\x02\x03\x04\x05", b"\x06\x07"])
+    # 8f. lone start code mid-stream, payload arrives across chunks
+    emit_stream([b"\x00\x00\x01", b"\x67\x80", b"\x40"])
+    # 8g. zeros between NALs (delimiter stripping at seams) + empty chunk
+    emit_stream([body + b"\x00\x00", b"", body])
+
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                         "rust", "h264core", "tests", "golden_vectors.txt")
     os.makedirs(os.path.dirname(path), exist_ok=True)

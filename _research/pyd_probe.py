@@ -52,3 +52,4 @@ assert back == raw, (back.hex(), raw.hex())
 print("OK emulation prevention roundtrip")
 
 print("PYD PROBE: ALL PASS")
+sys.exit(0)

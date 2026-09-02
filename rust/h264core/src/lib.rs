@@ -28,8 +28,11 @@ pub fn remove_emulation_prevention(data: &[u8]) -> Vec<u8> {
     let mut zeros: u32 = 0;
     let mut i = 0;
     while i < data.len() {
-        if zeros == 2 && data[i] == 3 && i + 1 < data.len() && data[i + 1] <= 3 {
-            // 00 00 03 xx -> drop the 03
+        if zeros == 2 && data[i] == 3 {
+            // 00 00 03 -> drop the 03 unconditionally. Oracle parity: pure
+            // Python drops ANY 0x03 after two zeros — even at buffer end or
+            // followed by >3. (The differential proved a spec-strict guard
+            // here was drift; the oracle is the contract.)
             zeros = 0;
             i += 1;
             continue;
@@ -187,6 +190,115 @@ impl Demuxer {
 }
 
 impl Default for Demuxer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Incremental Annex-B NAL splitter for raw rivers (screenrecord mode).
+/// TCP reads tear NALs apart at arbitrary boundaries — including inside a
+/// start code itself. feed(chunk) keeps the torn tail buffered and returns
+/// only COMPLETE NAL units (start-code payload, trailing zero delimiters
+/// stripped per spec: trailing_zero_8bits are not part of a NAL unit).
+/// Emulation prevention is NOT removed here; the parser does that per-NAL.
+///
+/// Faithful port of h264_math.AnnexBStreamSplitter (differential goldens:
+/// STREAMCASE vectors). Subtle semantics preserved:
+///   • 3-byte codes found first; a 4-byte code surfaces one byte later and
+///     its leading 00 rides along, then is rstripped as a delimiter zero.
+///   • Bytes before the FIRST start code of the stream are garbage.
+///   • feed() never emits a partial tail; flush() emits it at river end.
+pub struct AnnexBStreamSplitter {
+    buf: Vec<u8>,
+    pending: bool,
+}
+
+impl AnnexBStreamSplitter {
+    pub fn new() -> Self {
+        AnnexBStreamSplitter { buf: Vec::new(), pending: false }
+    }
+
+    pub fn feed(&mut self, chunk: &[u8]) -> Vec<Vec<u8>> {
+        self.buf.extend_from_slice(chunk);
+        self.drain(false)
+    }
+
+    /// River end: emit the final NAL if the buffer holds a valid one.
+    pub fn flush(&mut self) -> Vec<Vec<u8>> {
+        self.drain(true)
+    }
+
+    fn drain(&mut self, final_pass: bool) -> Vec<Vec<u8>> {
+        let n = self.buf.len();
+        let mut positions: Vec<usize> = Vec::new();
+        let mut i = 0usize;
+        while i + 2 < n {
+            // (Python scans i < n-2 — identical range; no usize underflow.)
+            if self.buf[i] == 0 && self.buf[i + 1] == 0 && self.buf[i + 2] == 1 {
+                positions.push(i);
+                i += 3;
+            } else {
+                i += 1;
+            }
+        }
+
+        let mut out: Vec<Vec<u8>> = Vec::new();
+        {
+            let mut emit = |seg: &[u8]| {
+                let mut end = seg.len();
+                while end > 0 && seg[end - 1] == 0 {
+                    end -= 1;
+                }
+                if end > 0 {
+                    out.push(seg[..end].to_vec());
+                }
+            };
+
+            for k in 0..positions.len().saturating_sub(1) {
+                let a = positions[k] + 3;
+                let bnd = positions[k + 1];
+                emit(&self.buf[a..bnd]);
+            }
+            if !positions.is_empty() {
+                let p0 = positions[0];
+                if self.pending {
+                    // buffer start .. first code = the pending NAL, now proven
+                    emit(&self.buf[..p0]);
+                }
+                // else: bytes before the FIRST code of the stream are garbage
+                self.pending = true;
+                let keep = positions[positions.len() - 1] + 3;
+                self.buf.drain(..keep.min(self.buf.len()));
+            } else if !final_pass {
+                if self.pending {
+                    // payload accumulating; keep ALL of it
+                } else if n > 2 {
+                    let keep = n - 2; // pre-first-code: keep possible torn code
+                    self.buf.drain(..keep);
+                }
+            }
+            if final_pass {
+                if !positions.is_empty() {
+                    // Unreachable by invariant (feed() consumed all codes),
+                    // kept for parity with the oracle's defensive branch.
+                    let last = positions[positions.len() - 1] + 3;
+                    if last <= self.buf.len() {
+                        emit(&self.buf[last..]);
+                    }
+                } else if self.pending && n > 0 {
+                    emit(&self.buf[..n]);
+                }
+                // Oracle parity: Python's flush() ends with self._buf.clear()
+                // (h264_math.py final block) — a second flush emits nothing.
+                // _pending intentionally persists, matching the oracle.
+                self.buf.clear();
+            }
+        }
+        out
+    }
+}
+
+impl Default for AnnexBStreamSplitter {
     fn default() -> Self {
         Self::new()
     }

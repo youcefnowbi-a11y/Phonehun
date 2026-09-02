@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use h264core::{is_keyframe, split_nals, Demuxer};
+use h264core::{is_keyframe, split_nals, AnnexBStreamSplitter, Demuxer};
 
 fn unhex(s: &str) -> Vec<u8> {
     if s.is_empty() {
@@ -24,6 +24,7 @@ fn main() {
     let mut fails = 0u32;
     let mut n_frames = 0u32;
     let mut n_cases = 0u32;
+    let mut n_streams = 0u32;
 
     let mut lines = data.lines().peekable();
     while let Some(line) = lines.next() {
@@ -110,11 +111,63 @@ fn main() {
                     fails += 1;
                 }
             }
+            Some("STREAMCASE") => {
+                n_streams += 1;
+                // Replay: CHUNK hex / EMIT hex* per feed, FLUSH, EMIT hex*,
+                // ENDSTREAM. Per-chunk attribution — a seam bug cannot hide
+                // inside concatenated output.
+                let mut chunk_emits: Vec<(Vec<u8>, Vec<Vec<u8>>)> = Vec::new();
+                let mut flush_emits: Vec<Vec<u8>> = Vec::new();
+                let mut in_flush = false;
+                for l in lines.by_ref() {
+                    let mut it2 = l.split_whitespace();
+                    match it2.next() {
+                        Some("CHUNK") => {
+                            in_flush = false;
+                            chunk_emits.push((unhex(it2.next().unwrap_or("")), Vec::new()));
+                        }
+                        Some("EMIT") => {
+                            let e = unhex(it2.next().unwrap_or(""));
+                            if in_flush {
+                                flush_emits.push(e);
+                            } else if let Some(last) = chunk_emits.last_mut() {
+                                last.1.push(e);
+                            }
+                        }
+                        Some("FLUSH") => in_flush = true,
+                        Some("ENDSTREAM") => break,
+                        _ => break,
+                    }
+                }
+                let mut sp = AnnexBStreamSplitter::new();
+                for (ci, (chunk, expect)) in chunk_emits.iter().enumerate() {
+                    let got = sp.feed(chunk);
+                    if got != *expect {
+                        println!(
+                            "FAIL stream#{n_streams} chunk#{ci}: got {} units want {}",
+                            got.len(),
+                            expect.len()
+                        );
+                        fails += 1;
+                    }
+                }
+                let got_flush = sp.flush();
+                if got_flush != flush_emits {
+                    println!(
+                        "FAIL stream#{n_streams} flush: got {} units want {}",
+                        got_flush.len(),
+                        flush_emits.len()
+                    );
+                    fails += 1;
+                }
+            }
             _ => {}
         }
     }
 
-    println!("GOLDEN VERDICT: {fails} failures across {n_frames} frames + {n_cases} demux cases");
+    println!(
+        "GOLDEN VERDICT: {fails} failures across {n_frames} frames + {n_cases} demux cases + {n_streams} stream cases"
+    );
     if fails == 0 {
         println!("Rust port == Python oracle, byte for byte. The transplant is honest.");
         std::process::exit(0);

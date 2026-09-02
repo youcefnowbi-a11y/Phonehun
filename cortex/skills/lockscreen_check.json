@@ -1,0 +1,7 @@
+{
+  "name": "lockscreen_check",
+  "description": "Read the keyguard state from dumpsys window: showing, secure, screenState.",
+  "steps": [
+    { "tool": "dumpsys", "args": { "service": "window", "lines": 120 } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "otp_hunt",
+  "description": "Surface newest SMS first — verification codes live at the top of the inbox.",
+  "steps": [
+    { "tool": "read_sms", "args": {} }
+  ]
+}

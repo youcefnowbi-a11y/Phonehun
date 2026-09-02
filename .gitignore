@@ -13,3 +13,6 @@ temp/
 # ── python cruft ──
 __pycache__/
 *.pyc
+
+# ── quarantined foreign repos (analysis only, never pushed) ──
+_xrefs/

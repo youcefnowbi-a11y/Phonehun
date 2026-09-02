@@ -1,0 +1,10 @@
+{
+  "name": "wake_and_see",
+  "description": "Wake the screen, capture evidence, and read the lockguard truth from dumpsys.",
+  "steps": [
+    { "tool": "screen_key", "args": { "code": 224 } },
+    { "sleep": 1500 },
+    { "tool": "screen_capture", "args": {} },
+    { "tool": "dumpsys", "args": { "service": "window", "lines": 120 } }
+  ]
+}

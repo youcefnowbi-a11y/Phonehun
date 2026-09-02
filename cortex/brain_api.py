@@ -8,6 +8,8 @@ CORTEX :: brain_api.py — HTTP surface of the LLM brain (VESPER).
 /api/brain/chat/clear  POST      wipe her memory
 /api/brain/status      GET       state, mode, step, narration, final, error
 /api/brain/stop        POST      stop signal
+/api/brain/say         POST      {"message": "..."} — whisper MID-mission into her
+                                 inbox (drained next step) or start a chat when idle
 """
 
 from flask import Blueprint, jsonify, request
@@ -86,3 +88,15 @@ def brain_status():
 def brain_stop():
     ok, msg = brain_core.stop_task()
     return jsonify({"success": ok, "message": msg})
+
+
+@brain_bp.route("/say", methods=["POST"])
+def brain_say():
+    """Operator channel: mid-mission whisper (drained per step) or chat when idle.
+    '__ABORT__' folds the campaign from inside her own loop."""
+    data = request.get_json(silent=True) or {}
+    msg = (data.get("message") or "").strip()
+    if not msg:
+        return jsonify({"success": False, "error": "message vide"}), 400
+    ok, resp = brain_core.say(msg)
+    return jsonify({"success": ok, "message": resp}), (200 if ok else 409)

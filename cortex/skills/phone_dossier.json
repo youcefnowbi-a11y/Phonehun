@@ -1,0 +1,9 @@
+{
+  "name": "phone_dossier",
+  "description": "One-pass identity: device info, battery, system properties.",
+  "steps": [
+    { "tool": "device_info", "args": {} },
+    { "tool": "battery", "args": {} },
+    { "tool": "device_props", "args": { "q": "ro.product" } }
+  ]
+}

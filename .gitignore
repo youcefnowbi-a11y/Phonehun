@@ -16,6 +16,12 @@ __pycache__/
 
 # ── quarantined foreign repos (analysis only, never pushed) ──
 _xrefs/
+scratch/
 
+# ── rust build artifacts (all variants) ──
 rust/target/
 rust/h264core-py/target/
+rust/h264core/target/
+
+# ── runtime telemetry ──
+cortex/tool_stats.json

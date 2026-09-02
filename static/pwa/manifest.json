@@ -1,0 +1,23 @@
+{
+  "name": "VESPER // Tactical Cyber Intelligence",
+  "short_name": "VESPER",
+  "description": "Tactical Android Operations & Autonomous SIGINT Intelligence Appliance",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#f8f9fb",
+  "theme_color": "#f8f9fb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/static/pwa/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/pwa/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

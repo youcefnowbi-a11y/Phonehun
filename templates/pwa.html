@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>VESPER // Tactical Cyber Intelligence</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#f8f9fb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="icon" type="image/png" href="/static/pwa/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/pwa/icons/icon-192.png">
+
+  <!-- Superlative Light Atelier Stylesheet -->
+  <link rel="stylesheet" href="/static/pwa/css/dimension.css?v=20">
+  
+  <script>
+    window.__DC_TOKEN__ = "{{ api_token }}";
+  </script>
+</head>
+<body>
+
+  <!-- Luminous Phone Electronics Hero Background -->
+  <div class="hero-vitrine-bg"></div>
+
+  <div class="app-viewport">
+
+    <!-- FLOATING MASTER NAVIGATION DOCK -->
+    <header class="nav-container">
+      
+      <!-- Left: Brand (Concept B Industrial Glyph) -->
+      <div class="brand-badge" style="gap: 10px; cursor: pointer;">
+        <svg width="28" height="28" viewBox="0 0 48 48" fill="none" style="display: block;">
+          <!-- Outer technical chevron -->
+          <path d="M6 8L24 42L42 8" stroke="var(--text-ink)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Inner chevron -->
+          <path d="M14 13L24 33L34 13" stroke="var(--text-ink)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- RF Waves -->
+          <path d="M18 9C20.5 6.5 27.5 6.5 30 9" stroke="var(--ember)" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M21 13C22.5 11.5 25.5 11.5 27 13" stroke="var(--ember)" stroke-width="2.5" stroke-linecap="round"/>
+          <!-- Target Core Diode -->
+          <circle cx="24" cy="23" r="3.5" fill="var(--ember)"/>
+        </svg>
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-family: var(--font-condensed); font-size: 16px; font-weight: 800; letter-spacing: 0.14em; line-height: 1; color: var(--text-ink);">VESPER</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: var(--ember); line-height: 1.3;">CORTEX // MK-IV</span>
+        </div>
+      </div>
+
+      <!-- Center-Left: Global Command Search Bar (Ctrl+K) -->
+      <div class="global-command-bar" onclick="VesperCockpit.openCommandPalette()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <span>Search tools, targets, dossiers...</span>
+        <kbd>Ctrl K</kbd>
+      </div>
+
+      <!-- Center-Right: Primary Tri-Engine Switcher -->
+      <div class="primary-mode-switcher">
+        <button id="btnModeAi" class="mode-toggle-btn active" onclick="setPrimaryMode('ai')">
+          <span class="mode-dot"></span>
+          <span>AI COCKPIT</span>
+        </button>
+        <button id="btnModePhone" class="mode-toggle-btn" onclick="setPrimaryMode('phone')">
+          <span>PHONE INTELLIGENCE</span>
+          <span id="phoneLootBadge" class="loot-counter-badge" style="display: none;">0</span>
+        </button>
+        <button id="btnModeManual" class="mode-toggle-btn" onclick="setPrimaryMode('manual')">
+          <span>MANUAL TOOLKIT</span>
+        </button>
+      </div>
+
+      <!-- Right: Action Pills -->
+      <div class="nav-actions">
+        <!-- Install PWA Button (Hidden in standalone desktop mode) -->
+        <button id="installPwaBtn" class="action-pill install-pwa" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Install App</span>
+        </button>
+
+        <!-- Device Selector -->
+        <select id="deviceSerialSelect" class="action-pill" style="outline: none; cursor: pointer; padding-right: 28px;">
+          <option value="">Searching devices...</option>
+        </select>
+
+        <!-- Master Arm / Stand Down Toggle -->
+        <button id="masterArmBtn" class="action-pill">
+          MASTER ARM
+        </button>
+
+        <!-- Status Indicator -->
+        <div id="masterStatusPill" class="status-pill online">
+          <span class="pulse-dot"></span>
+          <span>LISTENING</span>
+        </div>
+      </div>
+
+    </header>
+
+    <!-- Superlative Editorial Monograph Header Bar (Minimal tactical strip) -->
+    <section class="hero-monograph-bar">
+      <div>
+        <span class="monograph-eyebrow">TACTICAL APPLIANCE // MK-IV</span>
+        <span class="monograph-title">The Architecture of Silent Surveillance</span>
+      </div>
+      <div style="font-family: var(--font-condensed); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-graphite);">
+        AIRSPACE: ENCRYPTED // CORTEX: VESPER RESIDENT LIVE
+      </div>
+    </section>
+
+    <!-- ============================================================
+         PRIMARY MODE 1: AI COCKPIT (VESPER RESIDENT MIND)
+         ============================================================ -->
+    <div id="mode-ai-cockpit" class="ai-cockpit-grid">
+      
+      <!-- COLUMN 1: THE GLASS (PHONE MIRROR) -->
+      <div class="workspace-card" style="display: flex; flex-direction: column; align-items: center; padding: 16px 14px; height: calc(100vh - 150px); min-height: 700px;">
+        <div style="width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 0 8px;">
+          <span style="font-family: var(--font-condensed); font-size: 12px; font-weight: 700; color: var(--text-graphite); letter-spacing: 0.1em; text-transform: uppercase;">
+            DEVICE GLASS // 60 FPS
+          </span>
+          <button id="toggleStreamBtn" class="action-pill" style="padding: 3px 12px; font-size: 11px;" onclick="Glass.toggleStream()">
+            Start Stream
+          </button>
+        </div>
+
+        <!-- Live Hardware Telemetry HUD Bar -->
+        <div class="glass-telemetry-hud">
+          <div class="hud-item"><span style="color: var(--emerald);">●</span> <span>SM-A217F</span></div>
+          <div class="hud-item"><span>⚡ 82%</span></div>
+          <div class="hud-item"><span>5GHz</span></div>
+          <div class="hud-item"><span style="color: var(--ruby);">UNLOCKED</span></div>
+        </div>
+
+        <!-- Phone Chassis (Locked to true 9:19.5 smartphone aspect ratio) -->
+        <div class="phone-chassis">
+          <div class="phone-notch"></div>
+          
+          <div id="phoneViewport" class="phone-viewport">
+            <img id="deviceGlassImg" alt="Device Frame">
+            
+            <div id="glassEmptyState" class="glass-empty-state">
+              <div class="radar-ring">
+                <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ember); font-weight: 700;">RF</span>
+              </div>
+              <div style="font-family: var(--font-condensed); font-size: 14px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-ink);">
+                Target Screen Standby
+              </div>
+              <div style="font-size: 11px; color: var(--text-graphite); max-width: 190px; line-height: 1.5;">
+                Vesper can wake and touch the phone autonomously during missions.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hardware Keypad -->
+        <div class="hardware-bar" style="margin-top: 10px; margin-bottom: 8px;">
+          <button class="hw-button" onclick="Glass.quickSwipeUp()" style="color: var(--ember); border-color: rgba(235, 94, 40, 0.3); font-weight: 700;">SWIPE UP</button>
+          <button class="hw-button" onclick="Glass.sendKey(3)">HOME</button>
+          <button class="hw-button" onclick="Glass.sendKey(4)">BACK</button>
+          <button class="hw-button" onclick="Glass.sendKey(187)">APPS</button>
+          <button class="hw-button" onclick="Glass.sendKey(26)">POWER</button>
+          <button class="hw-button" onclick="Glass.typeText()">TYPE</button>
+        </div>
+
+        <!-- Target Hardware Intelligence Vitals -->
+        <div class="device-vitals-card">
+          <div class="vital-row">
+            <span class="vital-label">TARGET HW</span>
+            <span class="vital-val">Samsung SM-A217F (a21s)</span>
+          </div>
+          <div class="vital-row">
+            <span class="vital-label">DISPLAY</span>
+            <span class="vital-val">720×1600 · 320 DPI</span>
+          </div>
+          <div class="vital-row">
+            <span class="vital-label">SECURITY</span>
+            <span class="vital-val" style="color: var(--emerald);">KNOX DISARMED · ROOT</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLUMN 2: SINGLE NATURAL LANGUAGE CHAT -->
+      <div class="workspace-card" style="display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 700px;">
+        <div class="card-header">
+          <div class="card-title">
+            <span>Vesper</span>
+            <span class="card-subtitle">Autonomous Resident Mind</span>
+          </div>
+          <div id="vesperStateBadge" class="status-pill online">
+            <span class="pulse-dot"></span>
+            <span>VESPER READY</span>
+          </div>
+        </div>
+
+        <!-- Chat History Stream -->
+        <div id="vesperChatStream" class="chat-stream" style="flex: 1;">
+          <!-- Bubbles and Mission Starter Cards stream here -->
+        </div>
+
+        <!-- Rich Prompt Composer (Cursor / Codex style) -->
+        <div class="composer-box">
+          <textarea id="vesperChatInput" rows="2" placeholder="Message Vesper (plan mission, inspect target, or instruct actions)..." 
+            class="composer-textarea"
+            onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); VesperCockpit.sendUnifiedMessage(); }"></textarea>
+          
+          <div class="composer-meta-bar">
+            <div class="composer-pills-left">
+              <span class="model-pill">
+                <span class="pulse-dot" style="width: 5px; height: 5px;"></span>
+                <span>VESPER 4.0 // REACT</span>
+              </span>
+              <button class="context-tag-pill" onclick="VesperCockpit.insertContextTag('@target')">@target</button>
+              <button class="context-tag-pill" onclick="VesperCockpit.insertContextTag('@sms')">@sms</button>
+              <button class="context-tag-pill" onclick="VesperCockpit.insertContextTag('@casefile')">@casefile</button>
+            </div>
+
+            <div class="composer-pills-right">
+              <span class="shortcut-hint">↵ send · ⇧↵ newline</span>
+              <button id="vesperSendBtn" class="chat-send-btn" style="padding: 5px 16px; border-radius: var(--r-pill);" 
+                onclick="VesperCockpit.sendUnifiedMessage()">
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLUMN 3: ONE UNIFIED EXECUTION CONSOLE -->
+      <div id="vesperConsoleCard" class="workspace-card" style="display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 700px;">
+        
+        <!-- Header with Step Progress, Fullscreen & Abort -->
+        <div class="card-header" style="margin-bottom: 12px; padding-bottom: 10px;">
+          <div>
+            <div class="card-title" style="font-size: 14px;">
+              <span>Execution Console</span>
+            </div>
+            <span id="vesperStepDisplay" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--ember);">
+              IDLE
+            </span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="consoleFullscreenBtn" class="action-pill" style="padding: 3px 10px; font-size: 10.5px;" 
+              onclick="VesperCockpit.toggleConsoleFullscreen()" title="Toggle Fullscreen">
+              FULLSCREEN
+            </button>
+            <button id="vesperAbortBtn" class="action-pill armed" style="padding: 3px 10px; font-size: 10.5px;" 
+              onclick="VesperCockpit.emergencyAbort()">
+              ABORT
+            </button>
+          </div>
+        </div>
+
+        <!-- Step Progress Bar -->
+        <div class="step-progress-track" style="margin: 0 0 14px;">
+          <div id="vesperStepProgressBar" class="step-progress-fill" style="width: 0%;"></div>
+        </div>
+
+        <!-- Console View Tabs -->
+        <div class="subnav-bar" style="margin-bottom: 14px; width: 100%;">
+          <button class="subnav-btn console-tab-btn active" data-tab="feed" onclick="VesperCockpit.switchConsoleTab('feed')">Execution Feed</button>
+          <button class="subnav-btn console-tab-btn" data-tab="memory" onclick="VesperCockpit.switchConsoleTab('memory')">Memory Organs</button>
+          <button class="subnav-btn console-tab-btn" data-tab="tools" onclick="VesperCockpit.switchConsoleTab('tools')">48-Tool Belt</button>
+        </div>
+
+        <!-- TAB 1: Live Execution Feed -->
+        <div id="consoleFeedView" style="display: flex; flex: 1; flex-direction: column; overflow: hidden; min-height: 0;">
+          <div id="vesperNarrationFeed" class="flow-stream" style="flex: 1; height: auto;">
+            <div style="color: var(--text-graphite); padding: 14px; font-size: 11.5px;">Console ready. Awaiting mission launch or operator whisper...</div>
+          </div>
+          <div id="vesperActiveToolTicker" style="margin-top: 10px; font-family: var(--font-mono); font-size: 11px;">
+            <span style="color: var(--text-faint);">All 48 tools standby</span>
+          </div>
+        </div>
+
+        <!-- TAB 2: Memory Organs -->
+        <div id="consoleMemoryView" style="display: none; flex-direction: column; height: 100%;">
+          <div class="subnav-bar" style="margin-bottom: 10px;">
+            <button class="subnav-btn memory-subtab-btn active" data-tab="casefile" onclick="VesperCockpit.switchMemoryTab('casefile')">Casefile</button>
+            <button class="subnav-btn memory-subtab-btn" data-tab="lessons" onclick="VesperCockpit.switchMemoryTab('lessons')">Lessons</button>
+            <button class="subnav-btn memory-subtab-btn" data-tab="identity" onclick="VesperCockpit.switchMemoryTab('identity')">Identity</button>
+            <button class="subnav-btn memory-subtab-btn" data-tab="skills" onclick="VesperCockpit.switchMemoryTab('skills')">Skills</button>
+          </div>
+          <pre id="vesperMemoryContentBox" style="flex: 1; font-family: var(--font-mono); font-size: 11px; color: var(--text-body); background: var(--surface-well); padding: 12px; border-radius: var(--r-ui); overflow-y: auto; white-space: pre-wrap; line-height: 1.6;"></pre>
+        </div>
+
+        <!-- TAB 3: 48-Tool Belt -->
+        <div id="consoleToolsView" style="display: none; flex-direction: column; height: 100%; overflow-y: auto;">
+          <!-- Populated dynamically by VesperCockpit.renderToolsBelt() -->
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ============================================================
+         PRIMARY MODE 2: TARGET PHONE INTELLIGENCE & DATA DECK
+         ============================================================ -->
+    <div id="mode-phone-intelligence" style="display: none;">
+      
+      <!-- Sub-Deck Navigation Bar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div class="nav-pill-bar">
+          <button class="nav-tab phone-subnav-btn active" data-tab="loot" onclick="PhoneIntelligence.switchSubTab('loot')">
+            <span>AI Loot & Releases</span>
+          </button>
+          <button class="nav-tab phone-subnav-btn" data-tab="files" onclick="PhoneIntelligence.switchSubTab('files')">
+            <span>Filesystem Browser</span>
+          </button>
+          <button class="nav-tab phone-subnav-btn" data-tab="apps" onclick="PhoneIntelligence.switchSubTab('apps')">
+            <span>Applications Vault</span>
+          </button>
+          <button class="nav-tab phone-subnav-btn" data-tab="comms" onclick="PhoneIntelligence.switchSubTab('comms')">
+            <span>Comms & Data Vault</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 1. AI LOOT & RELEASES STREAM -->
+      <div id="phone-panel-loot" class="phone-panel-section" style="display: block;">
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>AI Exfiltrated Loot & Sensory Artifacts</span>
+              <span class="card-subtitle">Real-time stream of captured photos, surveillance mic recordings, and dumped files</span>
+            </div>
+            <button class="action-pill" onclick="PhoneIntelligence.loadLoot()">REFRESH LOOT</button>
+          </div>
+          <div id="phoneLootList" style="min-height: 380px; max-height: 600px; overflow-y: auto;">
+            <!-- Rendered by phone_intelligence.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. FILESYSTEM EXPLORER -->
+      <div id="phone-panel-files" class="phone-panel-section" style="display: none;">
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>Remote Storage Explorer</span>
+              <span class="card-subtitle">Direct SDCard access and download</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-family: var(--font-mono); font-size: 11px;">Path: <strong id="phoneCurrentPathDisplay">/sdcard</strong></span>
+              <button class="action-pill" style="padding: 2px 10px; font-size: 10.5px;" onclick="PhoneIntelligence.loadFiles('/sdcard')">Reset /sdcard</button>
+            </div>
+          </div>
+          <div id="phoneFilesList" style="min-height: 380px; max-height: 600px; overflow-y: auto;">
+            <!-- Rendered by phone_intelligence.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. APPLICATIONS VAULT -->
+      <div id="phone-panel-apps" class="phone-panel-section" style="display: none;">
+        <div class="workspace-card">
+          <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+            <div class="card-title">
+              <span>Installed Package Registry</span>
+              <span class="card-subtitle">Filter, audit, and launch applications on target</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="text" id="phoneAppSearchInput" placeholder="Filter apps by name or package..." 
+                class="action-pill" style="border-radius: var(--r-ui); font-size: 12px; width: 240px;"
+                oninput="PhoneIntelligence.loadApps(document.querySelector('.app-filter-btn.active')?.dataset.filter || 'user', this.value)">
+              <div class="subnav-bar">
+                <button class="subnav-btn app-filter-btn active" data-filter="user" onclick="document.querySelectorAll('.app-filter-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); PhoneIntelligence.loadApps('user', document.getElementById('phoneAppSearchInput').value)">User Apps</button>
+                <button class="subnav-btn app-filter-btn" data-filter="system" onclick="document.querySelectorAll('.app-filter-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); PhoneIntelligence.loadApps('system', document.getElementById('phoneAppSearchInput').value)">System Apps</button>
+                <button class="subnav-btn app-filter-btn" data-filter="all" onclick="document.querySelectorAll('.app-filter-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); PhoneIntelligence.loadApps('all', document.getElementById('phoneAppSearchInput').value)">All</button>
+              </div>
+            </div>
+          </div>
+          <div id="phoneAppsList" style="min-height: 380px; max-height: 600px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;">
+            <!-- Rendered by phone_intelligence.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. COMMS & DATA VAULT -->
+      <div id="phone-panel-comms" class="phone-panel-section" style="display: none;">
+        <div class="workspace-card">
+          <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+            <div class="card-title">
+              <span>Extracted Data & Communications Vault</span>
+              <span class="card-subtitle">SMS, Call Logs, Synced Accounts, and Saved Wi-Fi Passwords</span>
+            </div>
+            <div class="subnav-bar">
+              <button class="subnav-btn phone-comms-btn active" data-comms="sms" onclick="PhoneIntelligence.switchCommsSubTab('sms')">SMS (2FA OTPs)</button>
+              <button class="subnav-btn phone-comms-btn" data-comms="calls" onclick="PhoneIntelligence.switchCommsSubTab('calls')">Call Logs</button>
+              <button class="subnav-btn phone-comms-btn" data-comms="notifications" onclick="PhoneIntelligence.switchCommsSubTab('notifications')">Notifications</button>
+              <button class="subnav-btn phone-comms-btn" data-comms="accounts" onclick="PhoneIntelligence.switchCommsSubTab('accounts')">Accounts</button>
+              <button class="subnav-btn phone-comms-btn" data-comms="wifi" onclick="PhoneIntelligence.switchCommsSubTab('wifi')">Wi-Fi Passwords</button>
+            </div>
+          </div>
+          <div id="phone-comms-sms" style="display: block;">
+            <div id="phoneSmsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+          <div id="phone-comms-calls" style="display: none;">
+            <div id="phoneCallsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+          <div id="phone-comms-notifications" style="display: none;">
+            <div id="phoneNotificationsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+          <div id="phone-comms-accounts" style="display: none;">
+            <div id="phoneAccountsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+          <div id="phone-comms-wifi" style="display: none;">
+            <div id="phoneWifiList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================
+         PRIMARY MODE 3: ⚡ MANUAL TOOLKIT (OPERATOR WARFARE)
+         ============================================================ -->
+    <div id="mode-manual-toolkit" style="display: none;">
+      
+      <!-- Sub-Deck Navigation Bar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div class="nav-pill-bar">
+          <button class="nav-tab active" data-view="radar">
+            <span>Airspace & Siege</span>
+          </button>
+          <button class="nav-tab" data-view="skeleton">
+            <span>Skeleton Security</span>
+          </button>
+          <button class="nav-tab" data-view="forensics">
+            <span>Forensics & Comms</span>
+          </button>
+          <button class="nav-tab" data-view="toolkit">
+            <span>Deep Toolkit & Shell</span>
+          </button>
+          <button class="nav-tab" data-view="flow">
+            <span>Operation Flow</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- DECK: AIRSPACE & SIEGE -->
+      <main id="view-radar" class="view-section" style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 24px;">
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>Airspace Spectrum</span>
+              <span class="card-subtitle">Active mDNS & wireless debugging triage</span>
+            </div>
+            <button class="action-pill" onclick="Radar.triggerSweep()">
+              TRIGGER SWEEP
+            </button>
+          </div>
+          <div id="radarTargetsList" style="min-height: 400px; display: flex; flex-direction: column;">
+            <div style="color: var(--text-graphite); padding: 24px; text-align: center; font-family: var(--font-mono);">
+              Airspace clear. Click "TRIGGER SWEEP" to scan local broadcast domains.
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <div class="workspace-card">
+            <div class="card-header">
+              <div class="card-title"><span>Wireless QR Gateway</span></div>
+              <button class="action-pill" onclick="Radar.startQrPairing()">Generate QR</button>
+            </div>
+            <div id="qrCodeContainer" style="display: none; text-align: center; padding: 14px 0;">
+              <div style="background: #fff; display: inline-block; padding: 12px; border-radius: 16px; margin-bottom: 10px; border: 1px solid var(--hairline);">
+                <img id="qrCodeImage" alt="QR Code" style="width: 200px; height: 200px; display: block;">
+              </div>
+              <div id="qrCodeMeta" style="font-family: var(--font-mono); font-size: 11px; color: var(--emerald); font-weight: 600;"></div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-graphite); line-height: 1.6;">
+              Navigate to: <strong>Developer options → Wireless debugging → Pair device with QR code</strong>, then scan.
+            </div>
+          </div>
+
+          <div class="workspace-card">
+            <div class="card-header">
+              <div class="card-title"><span>PIN Fast-Pair</span></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <input id="pinTargetHost" type="text" placeholder="IP:PORT (e.g. 192.168.1.50:37482)" 
+                class="action-pill" style="width: 100%; border-radius: var(--r-ui); font-family: var(--font-mono);">
+              <input id="pinTargetCode" type="text" placeholder="6-digit Pairing Code" 
+                class="action-pill" style="width: 100%; border-radius: var(--r-ui); font-family: var(--font-mono);">
+              <button class="action-pill" style="justify-content: center; background: var(--surface-raised);" 
+                onclick="const h=document.getElementById('pinTargetHost').value; const c=document.getElementById('pinTargetCode').value; api('/api/ghost/pair', {method: 'POST', body: JSON.stringify({host: h, code: c})}).then(r => pushFlow('HIT', 'Pairing successful')).catch(e => pushFlow('ALERT', e.message))">
+                Submit Pairing Handshake
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- DECK: SKELETON SECURITY -->
+      <main id="view-skeleton" class="view-section" style="display: none; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 24px;">
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>Security Neutralizer</span>
+              <span class="card-subtitle">Bypass keyguards & controls</span>
+            </div>
+            <button class="action-pill" onclick="Skeleton.loadPosture()">REFRESH POSTURE</button>
+          </div>
+          <div id="skeletonPostureDetails" style="margin-bottom: 20px;"></div>
+          <div style="display: flex; gap: 12px;">
+            <button class="action-pill armed" style="flex: 1; justify-content: center;" onclick="Skeleton.neutralizeSecurity()">
+              NEUTRALIZE CONTROLS
+            </button>
+            <button class="action-pill" style="justify-content: center;" onclick="Skeleton.restoreSecurity()">
+              RESTORE BASELINE
+            </button>
+          </div>
+        </div>
+
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>Credential Vault</span>
+              <span class="card-subtitle">Extracted accounts & Wi-Fi keys</span>
+            </div>
+            <button class="action-pill" onclick="Skeleton.harvestCredentials()">HARVEST CREDENTIALS</button>
+          </div>
+          <div id="harvestedCredsList" style="min-height: 280px; max-height: 440px; overflow-y: auto;">
+            <div style="color: var(--text-graphite); padding: 24px; text-align: center;">
+              Click "HARVEST CREDENTIALS" to exfiltrate accounts and saved network keys.
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- DECK: FORENSICS & COMMS -->
+      <main id="view-forensics" class="view-section" style="display: none; grid-template-columns: 1fr;">
+        <div class="workspace-card">
+          <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+            <div class="card-title">
+              <span>Forensic Intelligence</span>
+              <span class="card-subtitle">Communications & Filesystem</span>
+            </div>
+            <div class="subnav-bar">
+              <button class="subnav-btn forensic-tab-btn active" data-tab="sms" onclick="Forensics.switchTab('sms')">SMS Intercept</button>
+              <button class="subnav-btn forensic-tab-btn" data-tab="calls" onclick="Forensics.switchTab('calls')">Call Logs</button>
+              <button class="subnav-btn forensic-tab-btn" data-tab="files" onclick="Forensics.switchTab('files')">Filesystem</button>
+              <button class="subnav-btn forensic-tab-btn" data-tab="notifications" onclick="Forensics.switchTab('notifications')">Notifications</button>
+            </div>
+          </div>
+          <div id="forensic-sms" class="forensic-view" style="display: block;">
+            <div id="forensicSmsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+          <div id="forensic-calls" class="forensic-view" style="display: none;">
+            <div id="forensicCallsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+          <div id="forensic-files" class="forensic-view" style="display: none;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-well); padding: 8px 12px; border-radius: var(--r-ui);">
+              <span>Path: <strong id="currentFilePathDisplay">/sdcard</strong></span>
+              <button class="action-pill" style="padding: 2px 10px; font-size: 10.5px;" onclick="Forensics.loadFiles('/sdcard')">Reset to /sdcard</button>
+            </div>
+            <div id="forensicFilesList" style="max-height: 480px; overflow-y: auto;"></div>
+          </div>
+          <div id="forensic-notifications" class="forensic-view" style="display: none;">
+            <div id="forensicNotificationsList" style="max-height: 520px; overflow-y: auto;"></div>
+          </div>
+        </div>
+      </main>
+
+      <!-- DECK: DEEP TOOLKIT & TERMINAL -->
+      <main id="view-toolkit" class="view-section" style="display: none; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr); gap: 24px;">
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>Direct ADB Root Shell</span>
+              <span class="card-subtitle">Low-level execution gateway</span>
+            </div>
+            <button class="action-pill" style="padding: 2px 10px; font-size: 10.5px;" onclick="document.getElementById('terminalOutputBox').textContent='$ DroidCommand Shell ready\n'">
+              Clear
+            </button>
+          </div>
+          <div id="terminalOutputBox" class="terminal-box">$ DroidCommand Shell ready&#10;</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <input id="terminalCommandInput" type="text" placeholder="Enter shell command..." 
+              class="action-pill" style="flex: 1; border-radius: var(--r-ui); font-family: var(--font-mono); font-size: 12px;"
+              onkeydown="if(event.key==='Enter') Toolkit.execTerminal()">
+            <button class="action-pill" onclick="Toolkit.execTerminal()">Execute</button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <div class="workspace-card">
+            <div class="card-header">
+              <div class="card-title"><span>CVE Vulnerability Scanner</span></div>
+              <button class="action-pill" onclick="Toolkit.runCveScan()">Run Audit</button>
+            </div>
+            <div id="cveScanResultBox" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-graphite); line-height: 1.6; max-height: 380px; overflow-y: auto;">
+              Click "Run Audit" to scan target Android version for known CVE exposures.
+            </div>
+          </div>
+
+          <!-- Quick Sensors Card -->
+          <div class="workspace-card">
+            <div class="card-header">
+              <div class="card-title"><span>Sensory Interception</span></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button class="action-pill" style="justify-content: center;" onclick="api('/api/audio/record', {method: 'POST', body: JSON.stringify({duration: 10, serial: STATE.activeSerial})}).then(r => pushFlow('HIT', 'Mic captured: ' + r.file)).catch(e => pushFlow('ALERT', e.message))">
+                RECORD 10S MIC
+              </button>
+              <button class="action-pill" style="justify-content: center;" onclick="api('/api/camera/snap', {method: 'POST', body: JSON.stringify({camera_id: 0, serial: STATE.activeSerial})}).then(r => pushFlow('HIT', 'Lens snapped: ' + r.file)).catch(e => pushFlow('ALERT', e.message))">
+                SILENT CAMERA SNAP
+              </button>
+              <button class="action-pill" style="justify-content: center;" onclick="api('/api/panopticon/location', {method: 'POST', body: JSON.stringify({serial: STATE.activeSerial})}).then(r => pushFlow('HIT', 'Location: ' + JSON.stringify(r))).catch(e => pushFlow('ALERT', e.message))">
+                RESOLVE TRILATERATION
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- DECK: OPERATION FLOW -->
+      <main id="view-flow" class="view-section" style="display: none; grid-template-columns: 1fr;">
+        <div class="workspace-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>Unified Telemetry Stream</span>
+              <span class="card-subtitle">Full forensic audit trail</span>
+            </div>
+          </div>
+          <div class="flow-stream" style="height: 650px;" id="flowFullscreenMirror"></div>
+        </div>
+      </main>
+
+    </div>
+
+  </div>
+
+  <!-- FLOATING COMMAND PALETTE (CTRL+K) -->
+  <div id="commandPaletteModal" class="command-palette-backdrop" style="display: none;" onclick="if(event.target === this) VesperCockpit.closeCommandPalette()">
+    <div class="command-palette-modal">
+      <div class="command-palette-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="commandPaletteInput" type="text" placeholder="Type a tool, objective, or command..." 
+          class="command-palette-input" oninput="VesperCockpit.filterCommandPalette(this.value)"
+          onkeydown="if(event.key==='Escape') VesperCockpit.closeCommandPalette()">
+        <kbd style="font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); border: 1px solid var(--hairline); padding: 2px 6px; border-radius: 4px;">ESC</kbd>
+      </div>
+      <div id="commandPaletteList" class="command-palette-list">
+        <!-- Injected dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/static/pwa/js/app.js?v=20"></script>
+  <script src="/static/pwa/js/glass.js?v=20"></script>
+  <script src="/static/pwa/js/phone_intelligence.js?v=20"></script>
+  <script src="/static/pwa/js/modules.js?v=20"></script>
+  <script src="/static/pwa/js/vesper_cockpit.js?v=20"></script>
+  <script src="/static/pwa/js/cortex.js?v=20"></script>
+  <script src="/static/pwa/js/radar.js?v=20"></script>
+
+</body>
+</html>

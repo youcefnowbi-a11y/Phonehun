@@ -33,13 +33,14 @@ file:line citation. No invented findings. Locate files under `DroidCommand/`.
 
 ## 2. PROGRESS STATE
 
-Fully audited (every line read by the prior auditor personally):
-`app.py` (1012 ln), `agent_relay.py` (285 ln), `network_scanner.py` (282 ln),
-`file_manager.py` (168 ln), `system_controls.py` (77 ln).
+Fully audited (every line read): `app.py` (1012 ln), `agent_relay.py` (285 ln),
+`network_scanner.py` (282 ln), `file_manager.py` (168 ln), `system_controls.py` (77 ln),
+`toolkit_manager.py` (345 ln), `media_browser.py` (66 ln). The last two were finished by the
+first survivor wave; every finding was re-verified against source by the parent auditor before
+entering this ledger.
 
 Partially audited (heads/tails read, middle sections need line-by-line pass):
-`adb_engine.py` (233 ln — L1-101, L218-233 done), `cve_bypass.py` (466 ln — L1-115, L440-466 done),
-`toolkit_manager.py` (345 ln — L1-85, L329-345 done).
+`adb_engine.py` (233 ln — L1-101, L218-233 done), `cve_bypass.py` (466 ln — L1-115, L440-466 done).
 
 Untouched (the remaining work, in recommended order):
 1. `ghost/` — `pairing_server.py` (368), `spake25519.py` (286: infinity handling, scalar
@@ -73,6 +74,7 @@ Out of scope (do NOT audit, do NOT push): `tools_clone\`, `_xrefs\`, `scratch\`,
 | H2 | `agent_relay.py` L191 | `srv.bind(("0.0.0.0", RELAY_PORT))` with ZERO authentication — any LAN host can `hello` and register/replace a session. `sid` is derived from attacker-controlled brand/model fields (L112-116). Reconnect replaces `SESSIONS[sid]` without closing the old conn (fd leak + session hijack). |
 | H3 | `agent_relay.py` L140-145, L94 | JSON frames are capped at 8MB, but the raw follow-up path (`frame.get("size")` → `_read_raw`/`_recv_exact`) has NO cap → memory-exhaustion DoS from any LAN peer. |
 | H4 | `cve_bypass.py` L235-236 | `ctx.check_hostname = False` / `ssl.CERT_NONE`. Defensible for the ADB-TLS exploit tool (target presents forged cert) but must be documented/flag-gated, never copied to client-facing code. |
+| H5 | `media_browser.py` L53-55 | `fetch_preview` composes the device-controlled `Path(remote_path).name` RAW into the host path: `safe_name = f"preview_{md5[:12]}_{filename}"`. Windows-illegal chars (`* ? " < > |`) in a device filename raise WinError 123 → unhandled 500; a mid-name colon becomes an NTFS Alternate Data Stream (miswrite/cache confusion). Traversal NOT possible (`.name` strips separators + md5 prefix keeps it inside TEMP_DIR). Fix: `re.sub(r'[^A-Za-z0-9._-]', '_', filename)` + length cap. VERIFIED by parent read of the full file. |
 
 ### MED
 | # | Where | Finding |
@@ -82,6 +84,7 @@ Out of scope (do NOT audit, do NOT push): `tools_clone\`, `_xrefs\`, `scratch\`,
 | M3 | `cve_bypass.py` L84-89 | `recv_packet` trusts the header length field without capping at `ADB_MAXDATA` (defined L49, unused on recv path) → malicious device can force a huge allocation. |
 | M4 | `cve_bypass.py` ~L226-229 | Ephemeral client cert/key written via `NamedTemporaryFile(delete=False)`; no cleanup visible in `main()` (L440-466) → private-key tempfiles accumulate. Verify + delete in `finally`. |
 | M5 | `system_controls.py` L39-53 | `type_text` escapes `\ ' " & ; ( ) | < >` and space→`%s`, but NOT backtick/`$` → device-side shell expansion (`` `cmd` ``, `$VAR`) through `adb shell`. Defense-in-depth escape or base64 the text. |
+| M6 | `media_browser.py` L54-58 | Preview cache keyed on `md5(remote_path)` only — no device serial in the key, no TTL: with two devices attached, `/sdcard/DCIM/x.jpg` on device A serves device B's cached pull; changed device files serve stale previews forever. Fix: hash `(serial, path)`, re-pull past a TTL. |
 
 ### LOW / HARDENING
 | # | Where | Finding |
@@ -92,6 +95,13 @@ Out of scope (do NOT audit, do NOT push): `tools_clone\`, `_xrefs\`, `scratch\`,
 | L4 | `network_scanner.py` L232-233 | `except Exception: pass` around `future.result()` silently swallows scan errors. |
 | L5 | `adb_engine.py` L51 | `run_binary_cmd` catches broad Exception, losing the "timed out" distinction that `run_cmd` has (L31-32). |
 | L6 | `config.py` | `API_TOKEN = secrets.token_urlsafe(32)` persisted plaintext to `.api_token` — accepted design, file is gitignored; NEVER commit or push it. |
+| L7 | `toolkit_manager.py` L120-124 | `dump_wifi_passwords` zips two independent `re.findall` lists (SSIDs, PSKs) — any open network (no `PreSharedKey`) shifts indices and misattributes later passwords to wrong SSIDs. Parse whole `<WifiConfiguration>` blocks instead. |
+| L8 | `toolkit_manager.py` L242,247,252 | `int()` on client input (`duration_ms` etc.) raises uncaught ValueError before the clamp → 500. Wrap in try/except. |
+| L9 | `toolkit_manager.py` L116,147,231-233 et al | Many `adb.shell` calls pass no explicit timeout. RESOLVED: engine default `timeout=30` applies (`adb_engine.py` L54-56, enforced in `run_cmd` L13-24, `TimeoutExpired` caught L31) — no hang possible. Downgraded from the survivor's conditional MED per her own criterion. Explicit per-call args still preferred for auditability. |
+| L10 | `toolkit_manager.py` L214-222 | `package_name` is `shlex.quote`d (no metachar injection) but not format-validated — a bare token like `-k` reaches pm's flag parser. Fix: `re.fullmatch(r'[A-Za-z][\w]*(\.[\w]+)+', ...)` before dispatch. |
+| L11 | `toolkit_manager.py` L125 | Wi-Fi PSKs leave the function as plaintext in the API response. Mask by default, full reveal behind an explicit flag. |
+| L12 | `toolkit_manager.py` L253-254 | `record_screen` uses fixed device tmp + epoch-second local name → concurrent recordings clobber. Use uuid names both sides. |
+| L13 | `media_browser.py` L58 | `remote_path` passed to `adb pull` unvalidated (leading-dash flag surface). Require `remote_path.startswith("/")`. |
 
 ### CHECKED, SAFE (verified by direct read — do not re-flag)
 - `app.py` L62-77 `gate_request`: hostname allowlist (DNS-rebinding guard) + `secrets.compare_digest` token check.
@@ -104,6 +114,9 @@ Out of scope (do NOT audit, do NOT push): `tools_clone\`, `_xrefs\`, `scratch\`,
 - `toolkit_manager.py`: `apply_tweak` keyed dispatch map L332-344 (no interpolation); `attempt_pin_unlock` digits-only via `re.sub(r'\D','',pin)` L75; L319 `return this.exec(cmd);` is JS-in-a-string for the device agent — benign, not Python eval.
 - `adb_engine.py`: `run_cmd` list-args + always-timeout + utf-8/replace encoding (GBK-safe) L13-34; serial targeting via `["-s", serial]` L9-11.
 - Syntax health: `compileall` clean for ALL native modules.
+- `toolkit_manager.py` middle section (first survivor wave, parent-verified): `remove_gesture_keys` L89-101 fixed literal commands; `dump_wifi_passwords` L105-116 literal `cat` list; `dump_raw_service` L171-177 `shlex.quote` + `timeout=15` (the file's model citizen); `record_screen` L252/256 duration cap `max(1, min(30, int(...)))` + `timeout=duration_sec + 10`; L319 `return this.exec(cmd);` is JS inside the triple-quoted Frida `root_bypass` string (L301-326) — device-agent payload, never executed by the Python host, no user input interpolated.
+- `media_browser.py` L30-32: `shlex.quote(sdir)` on fixed dirs + `timeout=20`; L58 list-args + `timeout=60`.
+- `network_scanner.py` L197-235: `all_results.extend()` runs only in the single consumer thread inside `as_completed` — no shared-list race (independent corroboration of the parent's clean verdict).
 
 ## 4. STALE CLAIMS IN THE OLD (PRIOR) AUDIT — do not repeat them
 - Claimed 10,621 LOC / app.py 932 / h264_math 683 — all stale. True inventory: 34 native modules,
@@ -125,4 +138,6 @@ Out of scope (do NOT audit, do NOT push): `tools_clone\`, `_xrefs\`, `scratch\`,
 
 ## 6. SUCCESSOR'S LOG (append here)
 
-_(nothing yet — start with ghost/pairing_server.py + spake25519.py)_
+### Entry 1 — first survivor wave (subagent `b47d2ef3`)
+- `toolkit_manager.py` + `media_browser.py` + `network_scanner.py` audited; all findings re-verified against source by the parent before entering this ledger (H5 confirmed by direct read; the timeout question resolved via `adb_engine` default). Ledger updated: H5, M6, L7–L13 added; both files moved to fully audited.
+- Next up for the next wave: **`ghost/pairing_server.py` + `spake25519.py` + `pairing_client.py`**, then the Section 2 order.

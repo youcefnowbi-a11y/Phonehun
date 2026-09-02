@@ -975,7 +975,8 @@ def _run(mode, payload):
         msgs.append({"role": "user", "content": payload})
     else:
         _log(CHAT_LOG, f"YOU: {payload}")
-        msgs = [{"role": "system", "content": sys}] + list(CHAT_HISTORY) + \
+        msgs = [{"role": "system", "content": sys},
+                {"role": "system", "content": whisper}] + list(CHAT_HISTORY) + \
                [{"role": "user", "content": payload}]
     BRAIN["msgs_out"] = msgs  # inbox drain target (thread-safe enough: single writer)
     narr = BRAIN["narration"]
@@ -1079,7 +1080,8 @@ def _run(mode, payload):
                                       "reformule mon roi]")
                 _log(CHAT_LOG, "REFUSAL absorbed — chat memory wiped")
             else:
-                CHAT_HISTORY.extend(msgs[1 + base:])
+                # skip persona+whisper system frames when folding the turn
+                CHAT_HISTORY.extend(msgs[2 + base:])
                 if final:
                     BRAIN["chat_last"] = final
                 del CHAT_HISTORY[:-60]

@@ -14,3 +14,5 @@
   never guess at amputated data.
 
 - [2026-09-02 22:25] - [2026-01 wake] Oversized results page by their FULL pointer name (e.g. 'read_ledger_0_77101'), not the tool name — the error lists available scratch keys, read it and adapt.
+
+- [2026-09-03 00:19] Skills returning oversized results nest pointers: the skill result itself pages via its pointer (run_skill_2_*), and each step's dumpsys has ANOTHER pointer inside — read both layers. dumpsys service=window on this A21s often emits "Failed to write while dumping service window: Broken pipe" yet still returns full text with success=true — treat as noise, parse anyway. Panel host: DESKTOP-I0BCQ9N, user chemsouuuu, PS 5.1.26100.9278, Flask :5000 confirmed UP via TCP probe. Browser history tool: empty (Chrome DB locked, needs root/run-as) — known wall, don't retry blindly.

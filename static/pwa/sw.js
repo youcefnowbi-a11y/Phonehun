@@ -1,5 +1,5 @@
 // DroidCommand Service Worker
-const CACHE_NAME = 'droidcommand-v11';
+const CACHE_NAME = 'vesper-v20';
 const STATIC_ASSETS = [
   '/',
   '/warroom',
@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
   '/static/pwa/css/dimension.css',
   '/static/pwa/js/app.js',
   '/static/pwa/js/glass.js',
+  '/static/pwa/js/phone_intelligence.js',
   '/static/pwa/js/modules.js',
   '/static/pwa/js/vesper_cockpit.js',
   '/static/pwa/js/cortex.js',
@@ -47,6 +48,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // HTML Navigation: Network-First so deployments update immediately, fallback to cache offline
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/warroom') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Static Assets: Cache-First with background revalidation
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const networked = fetch(event.request)

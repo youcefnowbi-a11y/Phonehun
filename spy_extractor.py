@@ -92,17 +92,20 @@ def capture_events(duration=5):
         duration = min(max(int(duration), 2), 30)  # Clamp 2-30s
 
         # getevent -lt gives labeled timestamps + event names
-        res = subprocess.run(
-            [adb.adb_path, "shell", "getevent", "-lt"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=duration + 3
-        )
+        try:
+            res = subprocess.run(
+                [adb.adb_path, "shell", "getevent", "-lt"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=duration
+            )
+            output = res.stdout if res.stdout else ""
+        except subprocess.TimeoutExpired as e:
+            output = e.stdout if e.stdout else ""
 
-        output = res.stdout if res.stdout else ""
         lines = output.splitlines()
 
         events = []
@@ -137,8 +140,6 @@ def capture_events(duration=5):
             "duration": duration
         }
 
-    except subprocess.TimeoutExpired:
-        return {"success": True, "events": [], "note": "Capture terminée (timeout normal)"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -147,18 +148,20 @@ def stream_events_raw(duration=5):
     """Get raw getevent output as string for SSE streaming."""
     try:
         duration = min(max(int(duration), 2), 30)
-        res = subprocess.run(
-            [adb.adb_path, "shell", "getevent", "-lt"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=duration + 2
-        )
-        return {"success": True, "output": res.stdout[:10000] if res.stdout else ""}
-    except subprocess.TimeoutExpired:
-        return {"success": True, "output": "(capture terminée)"}
+        try:
+            res = subprocess.run(
+                [adb.adb_path, "shell", "getevent", "-lt"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=duration
+            )
+            output = res.stdout if res.stdout else ""
+        except subprocess.TimeoutExpired as e:
+            output = e.stdout if e.stdout else ""
+        return {"success": True, "output": output[:10000]}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

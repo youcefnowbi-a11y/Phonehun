@@ -27,12 +27,13 @@ engine = ADBEngine()
 
 
 def _serial():
-    return (request.args.get("serial") or request.json_serial or "").strip() or None
+    data = request.get_json(silent=True) or {}
+    return (request.args.get("serial") or data.get("serial") or "").strip() or None
 
 
 @screen_bp.route("/frame")
 def frame():
-    """One fresh JPEG frame of the device screen."""
+    """One fresh PNG frame of the device screen (auto-wakes if asleep)."""
     serial = (request.args.get("serial") or "").strip() or None
     res = engine.run_binary_cmd(["exec-out", "screencap", "-p"],
                                 timeout=15, serial=serial)
@@ -40,11 +41,18 @@ def frame():
         return jsonify({"success": False,
                         "error": res.get("stderr") or "capture vide"}), 502
     data = res["stdout"]
-    # Some builds emit CRLF-mangled PNGs through exec-out; normalize.
-    if data[:8] == b"\x89PNG\r\n\x1a\n":
-        data = data.replace(b"\r\n", b"\n")
-        if data[:8] != b"\x89PNG\x1a\n"[:8]:
-            pass  # normalization best-effort; browsers are forgiving
+
+    # If phone screen is OFF/Dozing (black 7.9KB PNG), automatically wake it!
+    if len(data) < 15000:
+        engine.shell("input keyevent 224", serial=serial, timeout=5)  # KEYCODE_WAKEUP
+        res = engine.run_binary_cmd(["exec-out", "screencap", "-p"],
+                                    timeout=15, serial=serial)
+        if res["success"] and res["stdout"]:
+            data = res["stdout"]
+
+    # Only fix CRLF if adb on Windows mangled \n into \r\r\n
+    if data.startswith(b"\x89PNG\r\r\n\x1a\r\n"):
+        data = data.replace(b"\r\r\n", b"\r\n")
     return Response(data, mimetype="image/png")
 
 
@@ -64,40 +72,48 @@ def tap():
 
 @screen_bp.route("/swipe", methods=["POST"])
 def swipe():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     serial = (data.get("serial") or "").strip() or None
+
+    # Format A: Direct device coordinates {x1, y1, x2, y2, duration}
+    if "x1" in data and "y1" in data and "x2" in data and "y2" in data:
+        try:
+            x1 = int(float(data["x1"]))
+            y1 = int(float(data["y1"]))
+            x2 = int(float(data["x2"]))
+            y2 = int(float(data["y2"]))
+            duration = int(float(data.get("duration", data.get("ms", 300))))
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "error": "Coordonnées invalides"}), 400
+        res = engine.shell(f"input swipe {x1} {y1} {x2} {y2} {duration}", serial=serial, timeout=12)
+        return jsonify({"success": res["success"], "swiped": [x1, y1, x2, y2], "stderr": res.get("stderr")})
+
+    # Format B: Browser scaled coordinates {points: [[x1, y1], [x2, y2]], view: {w, h}}
     try:
         pts = data["points"]                    # [[x,y],[x,y]] browser coords
         dims = data["view"]                     # {w,h} of the displayed img
         duration_ms = int(int(data.get("ms", 300)))
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"success": False,
-                        "error": "points+view requis"}), 400
-    if len(pts) != 2:
-        return jsonify({"success": False,
-                        "error": "exactement deux points"}), 400
-    vw, vh = int(dims["w"]), int(dims["h"])
-    if not vw or not vh:
-        return jsonify({"success": False, "error": "dimensions invalides"}), 400
-    # Browser px -> device px: operator drags on what they SEE; we translate.
-    (x1, y1), (x2, y2) = pts
-    sx = sy = None
-    dev_dims = engine.shell("wm size", serial=serial, timeout=8)
-    m = None
-    import re as _re
-    m = _re.search(r"(\d+)x(\d+)", dev_dims.get("stdout") or "")
-    if m:
-        dw, dh = int(m.group(1)), int(m.group(2))
-        sx, sy = dw / vw, dh / vh
-    cmd_pts = (
-        f"{int(x1 * sx)} {int(y1 * sy)} {int(x2 * sx)} {int(y2 * sy)}"
-        if sx else f"{int(x1)} {int(y1)} {int(x2)} {int(y2)}"
-    )
-    res = engine.shell(f"input swipe {cmd_pts} {duration_ms}",
-                       serial=serial, timeout=12)
-    return jsonify({"success": res["success"],
-                    "scale_applied": bool(sx),
-                    "stderr": res.get("stderr")})
+        if len(pts) != 2:
+            return jsonify({"success": False, "error": "exactement deux points"}), 400
+        vw, vh = int(dims["w"]), int(dims["h"])
+        if not vw or not vh:
+            return jsonify({"success": False, "error": "dimensions invalides"}), 400
+        (x1, y1), (x2, y2) = pts
+        sx = sy = None
+        dev_dims = engine.shell("wm size", serial=serial, timeout=8)
+        import re as _re
+        m = _re.search(r"(\d+)x(\d+)", dev_dims.get("stdout") or "")
+        if m:
+            dw, dh = int(m.group(1)), int(m.group(2))
+            sx, sy = dw / vw, dh / vh
+        cmd_pts = (
+            f"{int(x1 * sx)} {int(y1 * sy)} {int(x2 * sx)} {int(y2 * sy)}"
+            if sx else f"{int(x1)} {int(y1)} {int(x2)} {int(y2)}"
+        )
+        res = engine.shell(f"input swipe {cmd_pts} {duration_ms}", serial=serial, timeout=12)
+        return jsonify({"success": res["success"], "scale_applied": bool(sx), "stderr": res.get("stderr")})
+    except (KeyError, TypeError, ValueError) as e:
+        return jsonify({"success": False, "error": f"Format de swipe invalide: {e}"}), 400
 
 
 @screen_bp.route("/size")

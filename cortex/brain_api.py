@@ -100,3 +100,29 @@ def brain_say():
         return jsonify({"success": False, "error": "message vide"}), 400
     ok, resp = brain_core.say(msg)
     return jsonify({"success": ok, "message": resp}), (200 if ok else 409)
+
+
+@brain_bp.route("/memory", methods=["GET"])
+def brain_memory():
+    """Serve Vesper's live memory organs: casefile, lessons, identity, skills."""
+    from pathlib import Path
+    section = request.args.get("section", "casefile").strip().lower()
+    cortex_dir = Path(__file__).parent
+    mem_dir = cortex_dir / "memory"
+    skills_dir = cortex_dir / "skills"
+
+    if section in ("casefile", "lessons", "identity"):
+        p = mem_dir / f"{section}.md"
+        content = p.read_text(encoding="utf-8", errors="replace") if p.exists() else f"# {section.upper()}\nNo {section} entries recorded yet."
+        return jsonify({"success": True, "section": section, "content": content})
+    elif section == "skills":
+        skills_text = ["# CRYSTALLIZED SKILLS (Python Tools)"]
+        if skills_dir.exists():
+            for f in sorted(skills_dir.glob("*.py")):
+                if f.name.startswith("__"):
+                    continue
+                first_lines = "\n".join(f.read_text(encoding="utf-8", errors="replace").splitlines()[:6])
+                skills_text.append(f"### {f.stem}\n```python\n{first_lines}\n```")
+        content = "\n\n".join(skills_text) if len(skills_text) > 1 else "No custom skills compiled yet."
+        return jsonify({"success": True, "section": section, "content": content})
+    return jsonify({"success": False, "error": f"Unknown memory section: {section}"}), 400

@@ -7,6 +7,7 @@ import subprocess
 import time
 import re
 import os
+import shlex
 from pathlib import Path
 from config import ADB_PATH, TEMP_DIR
 from adb_engine import ADBEngine
@@ -35,10 +36,12 @@ def send_sms(phone_number, message):
         msg_clean = message.strip()
 
         # Method 1: via am start (opens SMS app with pre-filled message)
+        safe_phone_uri = shlex.quote(f"sms:{phone}")
+        safe_body = shlex.quote(msg_clean)
         res = adb.shell(
             f'am start -a android.intent.action.SENDTO '
-            f'-d "sms:{phone}" '
-            f'--es sms_body "{msg_clean}" '
+            f'-d {safe_phone_uri} '
+            f'--es sms_body {safe_body} '
             f'--ez exit_on_sent true'
         )
 
@@ -57,10 +60,11 @@ def send_sms(phone_number, message):
             return {"success": True, "method": "am_intent", "phone": phone, "message": msg_clean}
 
         # Method 2: via service call isms (direct, may need different arg index per Android version)
-        escaped_msg = msg_clean.replace('"', '\\"')
+        safe_phone_arg = shlex.quote(phone)
+        safe_msg_arg = shlex.quote(msg_clean)
         res2 = adb.shell(
             f'service call isms 5 i32 0 s16 "com.android.mms" '
-            f's16 "{phone}" s16 "null" s16 "{escaped_msg}" s16 "null" s16 "null"'
+            f's16 {safe_phone_arg} s16 "null" s16 {safe_msg_arg} s16 "null" s16 "null"'
         )
 
         if res2["success"] and "Exception" not in res2["stdout"]:
@@ -131,10 +135,12 @@ def extract_app_data(package_name):
                 local_path = str(TEMP_DIR / f"exfil_{package_name}_{safe_name}")
 
                 # Copy via run-as to sdcard, then pull
-                cp_res = adb.shell(f"run-as {package_name} cat databases/{db_file} > {remote_tmp}")
+                safe_db_rel = shlex.quote(f"databases/{db_file}")
+                safe_remote_tmp = shlex.quote(remote_tmp)
+                cp_res = adb.shell(f"run-as {package_name} cat {safe_db_rel} > {safe_remote_tmp}")
                 if cp_res["success"]:
                     pull_res = adb.run_cmd(["pull", remote_tmp, local_path])
-                    adb.shell(f"rm {remote_tmp}")
+                    adb.shell(f"rm {safe_remote_tmp}")
                     if pull_res["success"]:
                         results["pulled_files"].append({
                             "name": db_file,
@@ -157,10 +163,12 @@ def extract_app_data(package_name):
                 remote_tmp = f"/sdcard/.dc_sp_{safe_name}"
                 local_path = str(TEMP_DIR / f"sp_{package_name}_{safe_name}")
 
-                cp_res = adb.shell(f"run-as {package_name} cat shared_prefs/{sp_file} > {remote_tmp}")
+                safe_sp_rel = shlex.quote(f"shared_prefs/{sp_file}")
+                safe_remote_tmp = shlex.quote(remote_tmp)
+                cp_res = adb.shell(f"run-as {package_name} cat {safe_sp_rel} > {safe_remote_tmp}")
                 if cp_res["success"]:
                     pull_res = adb.run_cmd(["pull", remote_tmp, local_path])
-                    adb.shell(f"rm {remote_tmp}")
+                    adb.shell(f"rm {safe_remote_tmp}")
                     if pull_res["success"]:
                         results["pulled_files"].append({
                             "name": sp_file,

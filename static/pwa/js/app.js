@@ -41,8 +41,9 @@ async function api(endpoint, options = {}) {
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   STATE.deferredInstallPrompt = e;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   const btn = document.getElementById('installPwaBtn');
-  if (btn) btn.style.display = 'inline-flex';
+  if (btn && !isStandalone) btn.style.display = 'inline-flex';
 });
 
 async function installPwa() {
@@ -61,22 +62,25 @@ let CURRENT_MODE = 'ai';
 function setPrimaryMode(mode) {
   CURRENT_MODE = mode;
   const btnAi = document.getElementById('btnModeAi');
+  const btnPhone = document.getElementById('btnModePhone');
   const btnManual = document.getElementById('btnModeManual');
   const viewAi = document.getElementById('mode-ai-cockpit');
+  const viewPhone = document.getElementById('mode-phone-intelligence');
   const viewManual = document.getElementById('mode-manual-toolkit');
 
+  if (btnAi) btnAi.classList.toggle('active', mode === 'ai');
+  if (btnPhone) btnPhone.classList.toggle('active', mode === 'phone');
+  if (btnManual) btnManual.classList.toggle('active', mode === 'manual');
+
+  if (viewAi) viewAi.style.display = (mode === 'ai') ? 'grid' : 'none';
+  if (viewPhone) viewPhone.style.display = (mode === 'phone') ? 'block' : 'none';
+  if (viewManual) viewManual.style.display = (mode === 'manual') ? 'block' : 'none';
+
   if (mode === 'ai') {
-    if (btnAi) btnAi.classList.add('active');
-    if (btnManual) btnManual.classList.remove('active');
-    if (viewAi) viewAi.style.display = 'grid';
-    if (viewManual) viewManual.style.display = 'none';
     if (window.Glass) window.Glass.onShow();
     if (window.VesperCockpit) window.VesperCockpit.pollStatus();
-  } else {
-    if (btnAi) btnAi.classList.remove('active');
-    if (btnManual) btnManual.classList.add('active');
-    if (viewAi) viewAi.style.display = 'none';
-    if (viewManual) viewManual.style.display = 'block';
+  } else if (mode === 'phone') {
+    if (window.PhoneIntelligence) window.PhoneIntelligence.init();
   }
 }
 

@@ -43,6 +43,7 @@ bitstreams, so the parser is verified against a writer that mirrors it —
 round-trip proof, fully offline, no device needed.
 """
 
+import os
 import struct
 
 
@@ -625,6 +626,57 @@ def selftest() -> int:
 
     print("H264_MATH SELFTEST " + ("PASSED" if ok else "FAILED"))
     return 0 if ok else 1
+
+
+# ---------------------------------------------------------------------------
+# GATE ⑯ — THE RUST HEART TRANSPLANT (PyO3).
+#
+# If the compiled `h264core` extension (rust/h264core-py, goldens-proven
+# byte-for-byte against the pure code above, ~237x on the NAL hot path)
+# imports, the hot paths reroute to it. The pure Python implementations stay
+# untouched as `_py_*` — the fallback AND the differential oracle.
+# Set DROID_H264_PURE=1 to force the pure path (used by the golden generator).
+# ---------------------------------------------------------------------------
+
+_py_split_nals = split_nals
+_py_is_keyframe = is_keyframe
+_py_H264FrameDemuxer = H264FrameDemuxer
+
+_RUST_HEART = False
+if os.environ.get("DROID_H264_PURE") != "1":
+    try:
+        import h264core as _rust
+
+        def split_nals(frame: bytes):
+            return [(n.nal_type, n.ref_idc, bytes(n.rbsp)) for n in _rust.split_nals(frame)]
+
+        def is_keyframe(frame: bytes) -> bool:
+            return _rust.is_keyframe(frame)
+
+        class H264FrameDemuxer:  # noqa: N801 - mirrors the pure class API
+            HEADER = _py_H264FrameDemuxer.HEADER
+            MAX_SANE_FRAME = _py_H264FrameDemuxer.MAX_SANE_FRAME
+
+            __slots__ = ("_d",)
+
+            def __init__(self):
+                self._d = _rust.Demuxer()
+
+            def feed(self, chunk: bytes):
+                return self._d.feed(chunk)
+
+            @staticmethod
+            def pack_frame(pts: int, payload: bytes) -> bytes:
+                return _rust.pack_frame(pts, payload)
+
+        _RUST_HEART = True
+    except ImportError:
+        _RUST_HEART = False
+
+
+def rust_heart() -> bool:
+    """True when the PyO3 h264core transplant is beating."""
+    return _RUST_HEART
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+[package]
+name = "h264core-py"
+version = "0.1.0"
+edition = "2021"
+description = "PyO3 extension: h264core NAL/demuxer hot path exposed to Python as `import h264core`"
+
+[lib]
+name = "h264core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py38"] }
+h264core = { path = "../h264core" }
+
+[profile.release]
+lto = true
+codegen-units = 1

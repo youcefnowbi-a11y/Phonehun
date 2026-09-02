@@ -18,3 +18,4 @@ __pycache__/
 _xrefs/
 
 rust/target/
+rust/h264core-py/target/

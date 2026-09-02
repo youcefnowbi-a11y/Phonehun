@@ -7,6 +7,11 @@ all computed with h264_math.py itself. dc_test (Rust) replays them.
 """
 import os, sys, random
 
+# The oracle MUST stay pure Python: goldens are generated from the original
+# implementation so the Rust transplant can be differentially proven against
+# it. Pin the pure path BEFORE h264_math imports (it grafts Rust if present).
+os.environ.setdefault("DROID_H264_PURE", "1")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from h264_math import (H264FrameDemuxer, split_nals, is_keyframe,
                        add_emulation_prevention)

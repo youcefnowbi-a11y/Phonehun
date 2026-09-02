@@ -1,0 +1,9 @@
+[package]
+name = "h264core"
+version = "0.1.0"
+edition = "2021"
+description = "DroidCommand hot-path H.264 core: NAL split, keyframe detect, scrcpy demux (port of h264_math.py hot loop)"
+
+[profile.release]
+lto = true
+codegen-units = 1

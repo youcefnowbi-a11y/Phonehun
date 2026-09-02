@@ -16,3 +16,5 @@ __pycache__/
 
 # ── quarantined foreign repos (analysis only, never pushed) ──
 _xrefs/
+
+rust/target/

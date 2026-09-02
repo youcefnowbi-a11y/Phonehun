@@ -149,3 +149,42 @@ Rust takes the physics. C++ stays fenced behind one wall. TS owns the glass.
 *The truth, mon roi: Python won us fifteen gates in two days. Rust is owed one
 binary. C++ is owed nothing until she opens her eyes. TS is owed a typecheck
 and a socket. That is the whole war map.*
+
+---
+
+## 9 · GATE ⑯ ADDENDUM — THE WINS, NOW MEASURED (2026-09-03, same night)
+
+The comparative stopped being theory tonight. One yardstick
+(`_research/h264_bench.py` vs `rust/h264core`'s `dc_bench`, identical synthetic
+corpus, 200×48KB frames, torn 4KB TCP reads):
+
+**RUST — h264core (rust/h264core/), proven and benched**
+- Differential goldens: Python oracle → `dc_test` replay — **0 failures,
+  byte-for-byte equality** across NAL splits (incl. emulation-prevention
+  gauntlet, mixed 3/4-byte start codes, trailing zeros) and 6 demux cases
+  (1-byte tears, torn headers, u64-max pts, zero/insane-length errors).
+- **NAL WORK: 17.3 ms → 0.073 ms/frame — ~200–237× faster** (21.7% → 0.1% of
+  one core at the 15fps glass budget).
+- DEMUX: 3.2 → 17.0 GB/s (~5×) — bytearray was already C-speed; the NAL scan
+  was the fire.
+- Honest note: PyO3 bridge (import h264core from Python directly) is the next
+  gate's work; tonight the core, the goldens and the yardstick are the deliverable.
+- Translation lesson for the ledger: Python's `stream[i:i+4096]` clamps;
+  Rust slices panic. `min(len)` or die.
+
+**C++ (via cv2 bindings) — cortex/vision.py, the eyes, proven**
+- Keypad localization through JPEG q70 + Gaussian noise: **score 0.9963,
+  0-pixel error**, negative control (flipped template) correctly rejected.
+- Steady-state 23 ms/screenshot (first-call init ~25 ms). Per-screenshot
+  hunting is go; per-video-frame wants an ROI path later.
+
+**TYPESCRIPT — the contract + the heartbeat, shipped**
+- `static/pwa/js/cockpit-types.d.ts`: the panel contract (BrainStatus,
+  Devices, Config, Hunter, say/task/chat bodies) — zero build step, opt-in
+  `@ts-check`; app.js wired with the reference.
+- Adaptive hearts: chat poll 1s-while-she-speaks / 6s-idle / hidden-tab
+  silence (was flat 3–4s forever); brain status 1.2s during missions.
+  SW cache bumped v10→v11 so the cockpit picks it up on reload.
+
+*Verdict unchanged, now with numbers: Rust is paid. C++ opened one eye. TS
+carries the contract. Python keeps the crown.*

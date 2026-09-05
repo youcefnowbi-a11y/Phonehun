@@ -457,14 +457,32 @@ def _doctrine_list():
     return out
 
 
+_NEG_RE = re.compile(
+    r"(?:\b(?:no|not|without|never|non|zero|sans|ne)\b"
+    r"|\bisn.t\b|\baren.t\b|\bdon.t\b|\bdoesn.t\b|\bcan.t\b|\bwon.t\b)"
+    r"(?:\s+\w+){0,2}\s*$", re.I)
+
+
 def _kw_hits(words, low):
+    # v21.2: negation-aware scoring — "no usb", "without debugging", "no adb"
+    # are NEGATIONS, not evidence. The old word-boundary matcher read them as
+    # positive hits, so a mission phrased "unlock, no debugging, no usb" was
+    # scored AGAINST the zero-touch playbook it desperately needed (the
+    # not_when hard-skip at _doctrine_select eliminated it outright).
     n = 0
     for w in words or []:
         if w.isascii():
-            if re.search(rf"(?<![^\W_]){re.escape(w)}(?![^\W_])", low):
-                n += 1
-        elif w in low:
+            try:
+                hits = list(re.finditer(rf"(?<![^\W_]){re.escape(w)}(?![^\W_])", low))
+            except re.error:
+                hits = []
+        else:
+            hits = list(re.finditer(re.escape(w), low))
+        for m in hits:
+            if _NEG_RE.search(low[max(0, m.start() - 32):m.start()]):
+                continue  # negated occurrence — a closed door, not an open one
             n += 1
+            break  # one positive occurrence is enough, per keyword (as before)
     return n
 
 

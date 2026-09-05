@@ -6,7 +6,6 @@
 // ============================================================
 
 window.VesperCockpit = (function () {
-  let pollTimer = null;
   // v21 fix: render gate keyed on CONTENT SIGNATURE (length + last line),
   // not length alone — the server slides its 60-line narration window
   // (del narr[:-60]), so length can hold steady while content moves.
@@ -14,10 +13,18 @@ window.VesperCockpit = (function () {
   let lastNarrationSig = '';
   let isRunning = false;
   let wasRunning = false;   // running→idle transition detector (chat refresh)
-  let awaitingReply = false; // chat POST sent — refresh stream when she answers
-  // v21 fix (injection): approved-plan objectives are AI/device-influenced text;
-  // they live here, and EXECUTE buttons reference them by index only.
-  const planRegistry = [];
+  // v21.1 (audit MED-2/MED-3): monotonic sequence guards — the newest fetch
+  // always wins, stale responses are discarded before they can paint.
+  let statusSeq = 0;
+  let chatSeq = 0;
+  // v21 fix (injection) + v21.1 (audit MED-4): approved-plan objectives are
+  // AI/device-influenced text; they live in an id-keyed Map — never an HTML
+  // attribute, never a shiftable array index.
+  const planRegistry = new Map();
+  let planIdSeq = 0;
+  // v21.1 (audit LOW-8): the 60-line narration window re-renders on every
+  // slide — this set stops one line from re-firing gesture/loot hooks.
+  const seenNarrLines = new Set();
 
   // Initialize
   function init() {
@@ -31,6 +38,20 @@ window.VesperCockpit = (function () {
     } catch (e) {}
     switchMemoryTab(['casefile', 'lessons', 'identity', 'skills'].includes(memTab) ? memTab : 'casefile');
     switchConsoleTab(['feed', 'memory', 'tools'].includes(conTab) ? conTab : 'feed');
+    // v21.1 (audit LOW-12): rehydrate fullscreen on F5
+    try {
+      if (localStorage.getItem('vc.fullscreen') === '1') {
+        const card = document.getElementById('vesperConsoleCard');
+        const btn = document.getElementById('consoleFullscreenBtn');
+        if (card) {
+          card.classList.add('console-fullscreen');
+          if (btn) {
+            btn.textContent = 'EXIT FULLSCREEN';
+            btn.classList.add('armed');
+          }
+        }
+      }
+    } catch (e) {}
     // v21 fix: no private 1.5s interval — app.js brainHeartbeat already owns
     // the status cadence (1.2s busy / 4s idle) and calls pollStatus(); two
     // pollers were double-fetching /api/brain/status every tick.
@@ -38,23 +59,25 @@ window.VesperCockpit = (function () {
 
   // 1. Poll Vesper Brain Status
   async function pollStatus() {
+    const seq = ++statusSeq; // v21.1: newest poll wins
     try {
       const data = await api('/api/brain/status');
-      updateStatusUi(data);
+      updateStatusUi(data, seq);
     } catch (e) {
       // Quiet fail on network hiccup
     }
   }
 
-  function updateStatusUi(status) {
+  function updateStatusUi(status, seq) {
     if (!status) return;
+    if (seq !== undefined && seq !== statusSeq) return; // v21.1: stale poll
 
     const state = status.state || 'idle';
     isRunning = (state === 'running');
-    // v21: when a chat turn completes (running→idle), refresh the stream —
-    // the old one-shot setTimeout(loadChat, 800) raced her thinking time.
-    if (wasRunning && !isRunning && awaitingReply) {
-      awaitingReply = false;
+    // v21.1 (audit MED-1): refresh on EVERY running→idle edge — the old
+    // awaitingReply flag died on F5, so a reload mid-mission froze the chat
+    // stream until the next send. Edge detection alone is enough.
+    if (wasRunning && !isRunning) {
       loadChat();
     }
     wasRunning = isRunning;
@@ -83,9 +106,10 @@ window.VesperCockpit = (function () {
     const stepEl = document.getElementById('vesperStepDisplay');
     const stepBar = document.getElementById('vesperStepProgressBar');
     const stepNum = status.step || 0;
-    const maxSteps = (status.mode === 'chat')
+    // v21.1 (audit LOW-7): max_steps=0 would divide to Infinity — clamp to 1.
+    const maxSteps = Math.max(1, (status.mode === 'chat')
       ? (status.max_chat_steps || 20)
-      : (status.max_steps || 40);
+      : (status.max_steps || 40));
     if (stepEl) {
       stepEl.textContent = isRunning ? `STEP ${stepNum} / ${maxSteps}` : 'IDLE';
     }
@@ -105,8 +129,14 @@ window.VesperCockpit = (function () {
         lastNarrationSig = sig;
         narrationBox.innerHTML = '';
         narrations.forEach((line) => {
-          // Detect tool calls or gestures to visually animate on Glass
-          detectAndTriggerGlassGestures(line);
+          // v21.1 (audit LOW-8): dedupe gesture/loot triggers — the window
+          // re-renders all 60 lines per slide, old code re-fired them all.
+          if (!seenNarrLines.has(line)) {
+            seenNarrLines.add(line);
+            if (seenNarrLines.size > 500) seenNarrLines.clear();
+            // Detect tool calls or gestures to visually animate on Glass
+            detectAndTriggerGlassGestures(line);
+          }
 
           if (line.includes('tool:')) {
             // Codex / Cursor style Collapsible Tool Call Card
@@ -204,8 +234,10 @@ window.VesperCockpit = (function () {
     const stream = document.getElementById('vesperChatStream');
     if (!stream) return;
 
+    const seq = ++chatSeq; // v21.1 (audit MED-3): last response wins
     try {
       const data = await api('/api/brain/chat');
+      if (seq !== chatSeq) return;
       const msgs = data.messages || [];
       stream.innerHTML = '';
 
@@ -266,13 +298,15 @@ window.VesperCockpit = (function () {
           const isPlanMsg = m.role === 'assistant' &&
             /\n\s*\d+[.)]/.test(m.content) && m.content.length >= 60;
           if (isPlanMsg) {
-            // v21 fix (injection): the old JSON.stringify + &quot; attribute
-            // trick double-decoded — a literal "&quot;" inside a plan broke
-            // out of the JS string at attribute-parse time. The objective now
-            // lives in the registry; the button carries an integer ref only.
-            planRegistry.push(m.content.slice(0, 400));
-            if (planRegistry.length > 100) planRegistry.splice(0, planRegistry.length - 100);
-            const ref = planRegistry.length - 1;
+            // v21.1 (audit MED-4): array indices shifted when the >100 prune
+            // spliced the head — a stale button could EXECUTE the wrong plan.
+            // Monotonic id → objective Map; refs never move. No 400-char cut:
+            // the objective lives in JS memory, not in an attribute (LOW-11).
+            const ref = ++planIdSeq;
+            planRegistry.set(ref, m.content);
+            if (planRegistry.size > 200) {
+              planRegistry.delete(planRegistry.keys().next().value);
+            }
             contentHtml += `
               <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--hairline);">
                 <button class="action-pill install-pwa" style="padding: 4px 14px; font-size: 11px; font-weight: 700;"
@@ -284,7 +318,8 @@ window.VesperCockpit = (function () {
           const planBtn = b.querySelector('button[data-plan-ref]');
           if (planBtn) {
             planBtn.addEventListener('click', () => {
-              launchApprovedPlan(planRegistry[parseInt(planBtn.dataset.planRef, 10)]);
+              const objective = planRegistry.get(parseInt(planBtn.dataset.planRef, 10));
+              if (objective) launchApprovedPlan(objective);
             });
           }
           stream.appendChild(b);
@@ -349,8 +384,8 @@ window.VesperCockpit = (function () {
           return;
         }
 
-        // Standard conversation
-        awaitingReply = true;  // v21: refresh on the running→idle edge, 800ms as fallback
+        // Standard conversation (the running→idle edge refresh is owned by
+        // updateStatusUi; the 800ms fallback stays for snappiness)
         await api('/api/brain/chat', {
           method: 'POST',
           body: JSON.stringify({ message: text })
@@ -358,6 +393,9 @@ window.VesperCockpit = (function () {
         setTimeout(loadChat, 800);
       }
     } catch (e) {
+      // v21.1 (audit LOW-9): the input was cleared before the POST — restore
+      // the operator's text, but only if they haven't typed something new.
+      if (input && !input.value) input.value = text;
       pushFlow('ALERT', `Message error: ${e.message}`);
     }
   }
@@ -393,9 +431,14 @@ window.VesperCockpit = (function () {
         method: 'POST',
         body: JSON.stringify({ message: '__ABORT__' })
       });
-      pushFlow('HIT', 'Emergency abort signal accepted.');
-      const grid = document.getElementById('mode-ai-cockpit');
-      if (grid) grid.classList.remove('mission-active');
+      // v21.1 (audit LOW-10): honor the server verdict, don't celebrate blind.
+      if (res.success) {
+        pushFlow('HIT', 'Emergency abort signal accepted.');
+        const grid = document.getElementById('mode-ai-cockpit');
+        if (grid) grid.classList.remove('mission-active');
+      } else {
+        pushFlow('ALERT', `Abort rejected: ${res.message || res.error || 'unknown'}`);
+      }
       pollStatus();
     } catch (e) {
       pushFlow('ALERT', `Abort error: ${e.message}`);
@@ -409,6 +452,8 @@ window.VesperCockpit = (function () {
     if (!card) return;
 
     const isFs = card.classList.toggle('console-fullscreen');
+    // v21.1 (audit LOW-12): fullscreen state survives F5 like the tabs do
+    try { localStorage.setItem('vc.fullscreen', isFs ? '1' : '0'); } catch (e) {}
     if (btn) {
       btn.textContent = isFs ? 'EXIT FULLSCREEN' : 'FULLSCREEN';
       btn.classList.toggle('armed', isFs);

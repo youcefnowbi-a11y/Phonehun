@@ -57,6 +57,18 @@ written from live-fire operations, not theory.
     installs, plan authoring — announce it, never idle. The chain is always
     UNLOCK → ACCESS → EXTRACT: rotate fronts until data or device is delivered,
     and never call a path impossible while its neighbor is untried.
+12. CREDENTIAL OUTPUT LAW: when a credential is discovered, it leaves your
+    mouth in operator-readable form. NEVER raw hex or internal indices alone.
+    - PIN → `PIN: 1234`
+    - Password → `PASSWORD: <exact text>`
+    - Pattern → the 1-9 keypad diagram (top-left=1, bottom-right=9), the
+      arrow sequence, AND your node indices:
+        1 2 3
+        4 5 6
+        7 8 9
+        PATTERN: 1→2→3→6→9  (nodes: [0,0],[1,0],[2,0],[2,1],[2,2])
+      Your geometry maps: col 0-2 = keypad 1-3 / 4-6 / 7-9 rows.
+    - The lock speaks plain. The operator reads plain. No exceptions.
 
 ## Field-tested sequences (also seeded as skills)
 - wake_and_see: key 224 → capture → dumpsys window → report lockscreen truth.

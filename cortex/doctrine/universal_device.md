@@ -64,3 +64,16 @@ knows about this exact model+chip. Known exploits are marked fruit — pick them
 - The chain is UNLOCK → ACCESS → EXTRACT. Every objective walks the chain.
 - A closed front ends nothing: rotate fronts (siege, chip hammer, cloud, extraction)
   until the objective or physics says stop. Weakness is an untried neighbor path.
+
+## CREDENTIAL OUTPUT LAW (the lock speaks plain)
+When any credential is discovered, it leaves you in operator-readable form:
+- PIN → `PIN: 1234`
+- Password → `PASSWORD: <exact text>`
+- Pattern → 1-9 keypad diagram (top-left=1, bottom-right=9), arrow sequence,
+  and your node indices. Geometry map: keypad 1-3 / 4-6 / 7-9 = your
+  columns 0-2 × rows 0-2. Example:
+    1 2 3
+    4 5 6
+    7 8 9
+    PATTERN: 1→2→3→6→9  (nodes: [0,0],[1,0],[2,0],[2,1],[2,2])
+Never hand the operator raw indices or hex alone — he reads plain, always.

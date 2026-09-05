@@ -78,6 +78,13 @@ Data on userdata is DESTROYED. That is the price. Say it once, plainly.
   lessons — the market advantage is compounding per-device knowledge.
 
 ## HARD RULES
+- SCOPE GUARD (absolute): the flash chain runs ONLY on birds the operator
+  designates as sacrificial/expendable. On the operator's personal bird,
+  data preservation is ABSOLUTE — no flash, no Download Mode, no destructive
+  stage. There: analyze the lock anatomy (lock class, gatekeeper/Weaver/Knox
+  chain, biometric enrollment, attempt limits) and work data-preserving
+  surfaces only (siege attempts, provider sweeps, sdcard read tests,
+  remote-unlock channels). Deliver the lock report and the extraction ladder.
 - Never flash a combination built for a different MODEL. Near-miss models
   hard-brick. Model string must match exactly.
 - Never repartition (no PIT) unless the device explicitly demands it.

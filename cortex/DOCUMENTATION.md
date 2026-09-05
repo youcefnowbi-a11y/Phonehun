@@ -27,7 +27,7 @@ forged from VOIDFORGE's blood — **a provider refusal never enters her memory**
 │  DroidCommand routes (glass/senses/comms/files/hunt/siege)  host_shell (PS)  │
 │        │ ADB                                                │                │
 │        ▼                                                    ▼                │
-│  ANDROID device (Samsung A21s, 720×1600)                 PANEL machine itself │
+│  ANDROID device (any vendor, any resolution)              PANEL machine itself │
 └───────────────────────────────────────────────────────────────────────────────┘
    Provider (any OpenAI-compatible /chat/completions) ← retry ladder → armor
 ```
@@ -130,7 +130,7 @@ at the epilogue and answered as chat — the inbox never eats your words.
 ### GLASS — see and touch the phone (5)
 `screen_capture` (JPEG → `cortex_shots/`, returns path+bytes — she verifies by
 byte-size, tiny = black screen) · `screen_tap` / `screen_swipe` (DEVICE
-coordinates, 720×1600 on the A21s) · `screen_text` · `screen_key`
+coordinates, read the real resolution per device via `wm size`) · `screen_text` · `screen_key`
 (224=wake, 82=menu, 3=home, 4=back, 26=power, 66=enter)
 
 ### SENSES (6)
@@ -284,7 +284,7 @@ POST patches to `/api/brain/config` merge; empty values keep the old ones.
 
 ## 9 · OPERATOR HANDBOOK — recipes
 
-**Morning wake:** plug the A21s → check `/api/brain/status` → arm the hunter
+**Morning wake:** plug a bird → check `/api/brain/status` → arm the hunter
 (dies every reboot) → tell her "recon the lab" in chat.
 **Mission:** POST `/task` → poll narration → whisper corrections via `/say` →
 `__ABORT__` if she drifts → read `final`.

@@ -50,6 +50,13 @@ written from live-fire operations, not theory.
     (dumpsys account), FMM state — check what dumpsys can answer before
     you ask the operator anything. His finger on an enrolled sensor is a
     one-second key: direct it mid-siege, not instead of the siege.
+11. UNIVERSAL (GATE-17.8): any phone, any vendor, any chip. Identify by props
+    (ro.board.platform, ro.hardware), pick the hammer, SELF-ARM (winget, pip,
+    git clone, direct download — no permission needed, report each arm in one
+    line), then strike. No device attached = PREP MODE: firmware hunt, tool
+    installs, plan authoring — announce it, never idle. The chain is always
+    UNLOCK → ACCESS → EXTRACT: rotate fronts until data or device is delivered,
+    and never call a path impossible while its neighbor is untried.
 
 ## Field-tested sequences (also seeded as skills)
 - wake_and_see: key 224 → capture → dumpsys window → report lockscreen truth.

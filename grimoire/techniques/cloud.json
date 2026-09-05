@@ -1,0 +1,123 @@
+{
+  "_meta": {
+    "domain": "cloud",
+    "code": "CLD",
+    "title": "Cloud & Container Security",
+    "description": "Where the enterprise actually lives now: identity-based attacks on IAM, metadata credential theft, container escape, and serverless abuse. In cloud, identity is the perimeter - and IAM misconfiguration is the new unpatched service.",
+    "sources": [
+      "https://hackingthe.cloud",
+      "https://github.com/RhinoSecurityLabs/cloudgoat",
+      "https://attack.mitre.org/matrices/enterprise/cloud/"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-CLD-001",
+      "name": "IAM Privilege Escalation Paths",
+      "klass": "cloud_attack",
+      "mitre": ["T1098", "T1078.004"],
+      "capec": ["CAPEC-433"],
+      "cwe": ["CWE-250"],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "AWS-style graphs of forgotten permissions: iam:PassRole + a compute action (run a workload with any role), iam:CreateAccessKey on another user, sts:AssumeRole chains, lambda:UpdateFunctionCode to hijack a privileged function. Rhino's research made these paths computable; Pacu automates them; cloudgoat teaches them hands-on.",
+      "detection": {
+        "description": "CloudTrail: CreateAccessKey/CreatePolicyVersion/AssumeRole anomalies per principal, PassRole on unusual compute launches, role assumptions from novel ASNs/regions, GuardDuty privilege-escalation findings, Config drift on IAM policy.",
+        "mitigations": [
+          "Least-privilege IAM with periodic review (IAM Access Analyzer)",
+          "Permissions-boundary on every role; deny iam:CreateAccessKey broadly",
+          "SCPs blocking high-risk IAM actions outside break-glass roles",
+          "CloudTrail enabled org-wide, alerting on the Rhino escalation primitives"
+        ]
+      },
+      "references": [
+        "https://rhinosecuritylabs.com/aws/aws-privilege-escalation-methods-mitigation/",
+        "https://attack.mitre.org/techniques/T1098/"
+      ]
+    },
+    {
+      "id": "GRM-CLD-002",
+      "name": "Metadata Credential Theft (IMDS Abuse)",
+      "klass": "cloud_attack",
+      "mitre": ["T1552.005"],
+      "capec": ["CAPEC-664"],
+      "cwe": ["CWE-918"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Any code execution on an instance plus SSRF reaches the metadata service and walks away with role credentials - the Capital One breach in one move. IMDSv2 (token via PUT, hop-limit 1) closes the SSRF path; plain IMDSv1 remains open on fleets that never got the memo.",
+      "detection": {
+        "description": "VPC flow logs to 169.254.169.254 from non-instance paths, GuardDuty SSRF/ec2 metadata findings, unusual GetRole/GetCredentials on instance profiles, AssumeRole events immediately following app-tier anomalies.",
+        "mitigations": [
+          "IMDSv2 required (HttpTokens=required, hop-limit 1) - fleet-wide, enforced by SCP",
+          "Egress filtering from app tier",
+          "Instance-role scope minimal; no admin roles on internet-facing workloads",
+          "Short-lived credentials + automatic rotation"
+        ]
+      },
+      "references": [
+        "https://hackingthe.cloud/aws/general-knowledge/ssrf/",
+        "https://attack.mitre.org/techniques/T1552/005/"
+      ]
+    },
+    {
+      "id": "GRM-CLD-003",
+      "name": "Container Escape & K8s RBAC Abuse",
+      "klass": "cloud_attack",
+      "mitre": ["T1611", "T1610"],
+      "capec": ["CAPEC-679"],
+      "cwe": ["CWE-250"],
+      "difficulty": "high",
+      "reliability": "medium",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Break the boundary: privileged containers (fd access to host devices), hostPath mounts, docker.sock exposure (docker-in-docker is root on the host), kernel primitives, or K8s RBAC paths (pod-create with a privileged spec, service-account token theft, exec into high-priv pods). The crown-jewel jump is always node-level.",
+      "detection": {
+        "description": "K8s audit logs: pod-create with privileged/hostPath specs, exec into sensitive namespaces, SA token use from novel IPs; container runtime anomalies (mount of host paths, namespace transitions), eBPF-based runtime security (Falco rules for container breakout patterns).",
+        "mitigations": [
+          "Pod Security Standards (restricted profile), no privileged pods without exception registry",
+          "No docker.sock mounts; rootless containers where feasible; seccomp/AppArmor defaults",
+          "Least-privilege RBAC per namespace; no default-SA automount for unprivileged workloads",
+          "Runtime security (Falco/Tetragon) for syscall-level breakout detection"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1611/",
+        "https://kubernetes.io/docs/concepts/security/"
+      ]
+    },
+    {
+      "id": "GRM-CLD-004",
+      "name": "Serverless & Event-Driven Abuse",
+      "klass": "cloud_attack",
+      "mitre": ["T1059", "T1190"],
+      "capec": ["CAPEC-240"],
+      "cwe": ["CWE-74"],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Function code with injection classes (event payloads are user input: S3 keys, headers, queue messages), oversized-bill DoS (recursion, fan-out amplification), event-data poisoning that lands in downstream sinks (the 'serverless SQLi'), and cross-function trust abuse via unwritten event schemas.",
+      "detection": {
+        "description": "Function error-rate and invocation anomalies, concurrency spikes near account limits, CloudTrail PutBucketPolicy/CreateAccessKey from function roles, unusual egress from function VPCs, downstream data-store query anomalies correlating with event sources.",
+        "mitigations": [
+          "Treat every event field as untrusted input (validate schemas strictly)",
+          "Function-role least privilege; no wildcard actions on data planes",
+          "Concurrency caps + budget alerts (the DoS answer is financial, not technical)",
+          "Recursion guards and dead-letter queues with alerting"
+        ]
+      },
+      "references": [
+        "https://hackingthe.cloud",
+        "https://owasp.org/www-project-serverless-top-ten/"
+      ]
+    }
+  ]
+}

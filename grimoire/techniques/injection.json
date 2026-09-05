@@ -1,0 +1,174 @@
+{
+  "_meta": {
+    "domain": "injection",
+    "code": "INJ",
+    "title": "Injection Classes",
+    "description": "The everyday killers of enterprise applications: data interpreted as code or structure. Highest ROI class for a web-facing tool to master, because these vulnerabilities are everywhere and almost always reachable from HTTP.",
+    "sources": [
+      "https://github.com/swisskyrepo/PayloadsAllTheThings",
+      "https://portswigger.net/web-security",
+      "https://owasp.org/www-project-web-security-testing-guide/"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-INJ-001",
+      "name": "SQL Injection (Union / Error Based)",
+      "klass": "injection",
+      "mitre": ["T1190"],
+      "capec": ["CAPEC-66"],
+      "cwe": ["CWE-89"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Craft input that terminates a string context and appends attacker SQL: union-select to exfiltrate arbitrary tables, error-based to read data through verbose database errors. Full read/write against the database backend, sometimes to RCE via sp_execute/INTO OUTFILE.",
+      "detection": {
+        "description": "WAF/IDS patterns for quote-terminators plus SQL keywords in parameters; anomalous 500s and database error text in responses; sudden large row-count queries from application service accounts; SELECT volume on tables the app never reads in normal flow.",
+        "mitigations": [
+          "Parameterized queries / prepared statements everywhere (the actual fix)",
+          "ORM query APIs with bound parameters; never string-concatenate SQL",
+          "Least-privilege DB accounts per service; disable dangerous features (xp_cmdshell, FILE)",
+          "Generic error pages; never echo SQL error detail to clients"
+        ]
+      },
+      "references": [
+        "https://owasp.org/www-community/attacks/SQL_Injection",
+        "https://portswigger.net/web-security/sql-injection"
+      ]
+    },
+    {
+      "id": "GRM-INJ-002",
+      "name": "Blind SQL Injection (Boolean / Time / Out-of-Band)",
+      "klass": "injection",
+      "mitre": ["T1190"],
+      "capec": ["CAPEC-66"],
+      "cwe": ["CWE-89"],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Extract data one bit at a time when output is not reflected: conditionals flip page content (boolean), sleep/CASE delays encode bits (time), or DNS/HTTP callbacks exfiltrate the answer (OOB). Slow, noisy in aggregate, and the most common path when error-based is suppressed.",
+      "detection": {
+        "description": "Request-pattern analytics: same endpoint with systematically varied parameter values, stable inter-request timing, per-character enumeration velocity; DB audit logs showing repeated information_schema queries; out-of-band DNS lookups from the DB host (the smoking gun for OOB).",
+        "mitigations": [
+          "Same parameterization fix as reflected SQLi",
+          "Rate-limit and fingerprint repetitive enumeration (queries per second per session)",
+          "Egress filtering from database hosts (blocks OOB channels entirely)"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/web-security/sql-injection/blind",
+        "https://github.com/swisskyrepo/PayloadsAllTheThings"
+      ]
+    },
+    {
+      "id": "GRM-INJ-003",
+      "name": "OS Command Injection",
+      "klass": "injection",
+      "mitre": ["T1059.004", "T1190"],
+      "capec": ["CAPEC-88"],
+      "cwe": ["CWE-78"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Application shells out to a system binary with user-controlled arguments; metacharacters (; | && $()) break out into arbitrary command execution under the web service account. Direct route to RCE with almost no specialized tooling required.",
+      "detection": {
+        "description": "Web server accounts spawning shells or binaries they never legitimately run; process ancestry violations (nginx/apache -> bash, w3wp -> cmd.exe); egress attempts immediately following parameterized requests; WAF metacharacter alerts.",
+        "mitigations": [
+          "Never invoke shells from web code; use language-native libraries and strict allowlists",
+          "If unavoidable: argv-array execution, no shell, strict input allowlisting (regex ^[a-zA-Z0-9_-]+$)",
+          "Run workers under least-privilege, no-shell-required service identities",
+          "Process-ancestry monitoring (Sysmon EID 1, Linux auditd execve) alerting on lineage breaks"
+        ]
+      },
+      "references": [
+        "https://owasp.org/www-community/attacks/Command_Injection",
+        "https://portswigger.net/web-security/os-command-injection"
+      ]
+    },
+    {
+      "id": "GRM-INJ-004",
+      "name": "Server-Side Template Injection (SSTI)",
+      "klass": "injection",
+      "mitre": ["T1059", "T1190"],
+      "capec": ["CAPEC-88"],
+      "cwe": ["CWE-1336"],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "User input embedded into a template before rendering: template syntax like {{7*7}} or ${7*7} evaluates server-side, and in engines such as Jinja2/Twig/Freemarker the object graph leads to process execution (SSTI is usually RCE in an evening of work). Fingerprint the engine first, then walk its sandbox escapes.",
+      "detection": {
+        "description": "Responses reflecting arithmetic payloads evaluated server-side (49 instead of {{7*7}}); template engine exceptions in logs referencing user strings; process spawn under template/cache directories; poll-based WAF alerts for ${} and {{}}.",
+        "mitigations": [
+          "Treat templates as code: never render user input as template source, pass it as context data",
+          "Sandboxed engines with restricted globals, deny-list of dunder/attribute chains",
+          "Alert on template-engine stack traces containing request data"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/research/server-side-template-injection",
+        "https://github.com/swisskyrepo/PayloadsAllTheThings"
+      ]
+    },
+    {
+      "id": "GRM-INJ-005",
+      "name": "XML External Entity Injection (XXE)",
+      "klass": "injection",
+      "mitre": ["T1190"],
+      "capec": ["CAPEC-201"],
+      "cwe": ["CWE-611"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "If the XML parser resolves external entities, DOCTYPE definitions read local files (file://), pivot to internal services (http:// - the SSRF bridge), or exfiltrate out-of-band via parameter entities. Legacy SOAP endpoints and anything accepting XML file uploads are prime surface.",
+      "detection": {
+        "description": "DOCTYPE/ENTITY keywords in request bodies at WAF; local file paths appearing in application errors; XML parser library stack traces; outbound requests from the application host to internal-only addresses immediately after XML uploads.",
+        "mitigations": [
+          "Disable DTDs and external entities at the parser (disallow-doctype-decl, ENTITY false) - the complete fix",
+          "Prefer JSON; where XML remains, use SAX/StAX with features locked down",
+          "Egress filtering from app tier to internal service ranges"
+        ]
+      },
+      "references": [
+        "https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing",
+        "https://portswigger.net/web-security/xxe"
+      ]
+    },
+    {
+      "id": "GRM-INJ-006",
+      "name": "Insecure Deserialization",
+      "klass": "logic_flaw",
+      "mitre": ["T1190"],
+      "capec": ["CAPEC-586"],
+      "cwe": ["CWE-502"],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "critical",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Deserializing attacker-controlled objects (Java serialized streams, .NET ViewState, PHP objects, Python pickle) instantiates gadget chains that end in code execution. ViewState without MAC validation, pre-auth Java gadget chains (Commons-Collections class), and pickle in web apps are the canonical instances.",
+      "detection": {
+        "description": "Serialized-object signatures in request bodies (rO0A, O:x, aca26d for .NET ViewState); ysoserial-pattern payloads at WAF; gadget-class names (InvokerTransformer, ObjectInputStream) in stack traces; heap-dump review after anomalies.",
+        "mitigations": [
+          "Never deserialize untrusted data with native object formats; use JSON with strict schemas",
+          "ViewState: enforce MAC validation and latest encryption (machineKey hygiene)",
+          "Upgrade gadget-bearing libraries; monitor deserialization exceptions",
+          "RASP/runtime hooks on ObjectInputStream-style entry points for high-risk apps"
+        ]
+      },
+      "references": [
+        "https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data",
+        "https://portswigger.net/web-security/deserialization"
+      ]
+    }
+  ]
+}

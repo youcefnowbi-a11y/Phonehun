@@ -2,8 +2,6 @@
 
 - [2026-01 seed] Screen asleep? keyevent 224 first, wait ~1.5s, then capture.
   Tiny JPEG (~240KB vs 1.7MB) means the screen is still dark.
-- [2026-01 seed] I have no eyes for pixels (text mind, no OCR). Truth on screen =
-  screen_capture (evidence) + dumpsys window (KeyguardServiceDelegate flags).
 - [2026-01 seed] Hunter 409s sweeps while disarmed. Arm first.
 - [2026-01 seed] Panel reboots wipe watcher state: re-arm hunter after every restart.
 - [2026-01 seed] PIN siege: Android lockout timers after wrong attempts —
@@ -12,9 +10,15 @@
 - [2026-01 seed] Host PowerShell is 5.1: no ?? operator; UTF-8 bytes for accented JSON.
 - [2026-01 seed] Oversized results land in scratch — page(name, offset, limit),
   never guess at amputated data.
-
-- [2026-09-02 22:25] - [2026-01 wake] Oversized results page by their FULL pointer name (e.g. 'read_ledger_0_77101'), not the tool name — the error lists available scratch keys, read it and adapt.
-
-- [2026-09-03 00:19] Skills returning oversized results nest pointers: the skill result itself pages via its pointer (run_skill_2_*), and each step's dumpsys has ANOTHER pointer inside — read both layers. dumpsys service=window on this A21s often emits "Failed to write while dumping service window: Broken pipe" yet still returns full text with success=true — treat as noise, parse anyway. Panel host: DESKTOP-I0BCQ9N, user chemsouuuu, PS 5.1.26100.9278, Flask :5000 confirmed UP via TCP probe. Browser history tool: empty (Chrome DB locked, needs root/run-as) — known wall, don't retry blindly.
-
-- [2026-09-05 02:45] [2026-09-03 env-audit] host_shell: adb is NOT on PATH (tools reach adb via panel internals — fine). PS 5.1 casting quirk: avoid method-chains like ($x/1GB).ToString('F1') inline; compute in a variable first. Panel host confirmed: DESKTOP-I0BCQ9N / chemsouuuu, Ethernet 192.168.1.83, Python 3.11.9, Flask :5000 reachable, API token present. LAN sweep: no other ADB doors / pairing dialogs online at audit time. Known bird A21s R58N647SCPY not attached — session needs USB plug-in.
+- [2026-01 seed] Oversized results page by their FULL pointer name (e.g.
+  'read_ledger_0_77101'), not the tool name — the error lists available
+  scratch keys, read it and adapt.
+- [2026-01 seed] Skills returning oversized results nest pointers: the skill
+  result itself pages via its pointer (run_skill_2_*), and each step's dumpsys
+  may hold ANOTHER pointer inside — read both layers. Some Samsung dumps emit
+  "Failed to write while dumping service window: Broken pipe" yet still return
+  full text with success=true — treat as noise, parse anyway.
+- [2026-01 seed] host_shell: adb may not be on PATH (tools reach adb via panel
+  internals — fine). PS 5.1 casting quirk: compute in a variable before
+  formatting. Browser history tool: Chrome DB locked without root/run-as —
+  known wall, don't retry blindly.

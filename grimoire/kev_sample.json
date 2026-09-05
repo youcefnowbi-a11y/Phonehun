@@ -1,0 +1,113 @@
+{
+  "_meta": {
+    "type": "kev_sample",
+    "source": "CISA Known Exploited Vulnerabilities Catalog",
+    "provenance": "AUTHORED FROM MODEL KNOWLEDGE - NOT FETCHED. Entries are real, well-known exploited CVEs; the JSON schema mirrors the CISA KEV feed shape, but dateAdded values and ransomware flags are from memory and unverified. Verify against the live feed on first sync.",
+    "source_url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+    "authored": "2025-06-14",
+    "verified_against_live_source": false,
+    "count": 10
+  },
+  "vulnerabilities": [
+    {
+      "cveID": "CVE-2019-0708",
+      "vendorProject": "Microsoft",
+      "product": "Remote Desktop Services",
+      "vulnerabilityName": "Microsoft RDP BlueKeep RCE",
+      "dateAdded": "2021-11-03",
+      "shortDescription": "RDP pre-auth RCE (BlueKeep). Wormable, legacy-OS exposure remains the risk.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Apply updates per vendor instructions; disable exposed RDP."
+    },
+    {
+      "cveID": "CVE-2021-44228",
+      "vendorProject": "Apache",
+      "product": "Log4j2",
+      "vulnerabilityName": "Apache Log4j2 Log4Shell RCE",
+      "dateAdded": "2021-12-10",
+      "shortDescription": "JNDI lookup injection via logged strings; ubiquitous footprint made it the year's defining RCE.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Update to patched Log4j2; search for downstream vulnerable dependencies."
+    },
+    {
+      "cveID": "CVE-2021-26855",
+      "vendorProject": "Microsoft",
+      "product": "Exchange Server",
+      "vulnerabilityName": "Microsoft Exchange ProxyLogon SSRF",
+      "dateAdded": "2021-03-18",
+      "shortDescription": "Exchange SSRF enabling pre-auth proxying to backend and full email-store access when chained.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Apply March 2021 Exchange cumulative updates; investigate historical exploitation."
+    },
+    {
+      "cveID": "CVE-2020-1472",
+      "vendorProject": "Microsoft",
+      "product": "Netlogon",
+      "vulnerabilityName": "Microsoft Netlogon ZeroLogon Elevation",
+      "dateAdded": "2021-03-23",
+      "shortDescription": "Cryptographic flaw in MS-NRPC allows domain admin impersonation - direct route to domain takeover.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Enforce secure RPC; update domain controllers."
+    },
+    {
+      "cveID": "CVE-2022-22965",
+      "vendorProject": "VMware, VMware Tanzu, Spring",
+      "product": "Spring Framework",
+      "vulnerabilityName": "Spring Framework Spring4Shell RCE",
+      "dateAdded": "2022-04-04",
+      "shortDescription": "Class-loader manipulation via data binding in Spring MVC on JDK9+.",
+      "knownRansomwareCampaignUse": "Unknown",
+      "requiredAction": "Update Spring Framework per vendor instructions."
+    },
+    {
+      "cveID": "CVE-2023-20198",
+      "vendorProject": "Cisco",
+      "product": "IOS XE Web UI",
+      "vulnerabilityName": "Cisco IOS XE Web UI Privilege Escalation",
+      "dateAdded": "2023-10-16",
+      "shortDescription": "Unauthenticated account creation via the web UI management interface; mass-exploited at disclosure.",
+      "knownRansomwareCampaignUse": "Unknown",
+      "requiredAction": "Disable web UI or update; audit for rogue local accounts."
+    },
+    {
+      "cveID": "CVE-2019-11510",
+      "vendorProject": "Ivanti (Pulse Secure)",
+      "product": "Pulse Connect Secure",
+      "vulnerabilityName": "Ivanti Pulse Connect Secure Path Traversal",
+      "dateAdded": "2021-11-03",
+      "shortDescription": "Pre-auth arbitrary file read on VPN appliance, leading to credential and session theft.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Upgrade appliance per vendor instructions; check for compromise artifacts."
+    },
+    {
+      "cveID": "CVE-2018-13379",
+      "vendorProject": "Fortinet",
+      "product": "FortiOS SSL VPN",
+      "vulnerabilityName": "Fortinet FortiOS Path Traversal Credential Exposure",
+      "dateAdded": "2020-05-12",
+      "shortDescription": "Pre-auth file read exposing VPN session credentials; heavily recycled in later intrusions.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Upgrade to patched FortiOS; rotate exposed credentials."
+    },
+    {
+      "cveID": "CVE-2024-1709",
+      "vendorProject": "ConnectWise",
+      "product": "ScreenConnect",
+      "vulnerabilityName": "ConnectWise ScreenConnect Authentication Bypass",
+      "dateAdded": "2024-02-21",
+      "shortDescription": "Path-traversal-in-auth allowing RMM admin creation; exploited in the wild within days of disclosure.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Update ScreenConnect immediately; audit operator accounts."
+    },
+    {
+      "cveID": "CVE-2021-34527",
+      "vendorProject": "Microsoft",
+      "product": "Windows Print Spooler",
+      "vulnerabilityName": "Windows Print Spooler PrintNightmare RCE",
+      "dateAdded": "2021-07-01",
+      "shortDescription": "Spooler RCE/LPE via driver operations; domain-class impact given spooler ubiquity.",
+      "knownRansomwareCampaignUse": "Known",
+      "requiredAction": "Apply updates; disable spooler on servers not requiring it."
+    }
+  ]
+}

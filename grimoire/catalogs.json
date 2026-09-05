@@ -1,0 +1,262 @@
+{
+  "_meta": {
+    "domain": "catalogs",
+    "code": "CAT",
+    "title": "The Library Catalog",
+    "description": "The full curated source list: where every volume came from and where to pull deeper material. Each entry notes license status so bulk ingestion stays clean.",
+    "sources": [
+      "https://github.com/danielmiessler/SecLists",
+      "https://attack.mitre.org"
+    ]
+  },
+  "catalogs": [
+    {
+      "category": "wordlists",
+      "name": "SecLists",
+      "url": "https://github.com/danielmiessler/SecLists",
+      "purpose": "Canonical multi-category dictionary: usernames, passwords, fuzzing, sensitive paths, discovery patterns",
+      "format": "txt",
+      "license": "MIT (open, bulk ingestion clean)"
+    },
+    {
+      "category": "wordlists",
+      "name": "Assetnote Wordlists",
+      "url": "https://wordlists.assetnote.io",
+      "purpose": "Real-world-data-derived wordlists; best-in-class for subdomain and content discovery",
+      "format": "txt",
+      "license": "check repo (free to use)"
+    },
+    {
+      "category": "wordlists",
+      "name": "Probable-Wordlists",
+      "url": "https://github.com/berzerk0/Probable-Wordlists",
+      "purpose": "Statistically ordered real-password-derived lists; realistic credential simulation",
+      "format": "txt",
+      "license": "open"
+    },
+    {
+      "category": "wordlists",
+      "name": "fuzzdb",
+      "url": "https://github.com/fuzzdb-project/fuzzdb",
+      "purpose": "Classic fuzzing patterns and attack payload strings",
+      "format": "txt",
+      "license": "open"
+    },
+    {
+      "category": "wordlists",
+      "name": "Kali wordlists package",
+      "url": "https://www.kali.org/tools/wordlists/",
+      "purpose": "Distro-standard list set incl. rockyou; `apt install wordlists` on Kali",
+      "format": "txt",
+      "license": "varies per list (rockyou is breached-data-derived: use only in authorized labs)"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "PayloadsAllTheThings",
+      "url": "https://github.com/swisskyrepo/PayloadsAllTheThings",
+      "purpose": "Every injection class with working payloads and methodology, organized by vuln type",
+      "format": "markdown",
+      "license": "MIT-like open (see repo)"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "HackTricks",
+      "url": "https://book.hacktricks.xyz",
+      "purpose": "End-to-end pentesting wiki, recon to privesc to cloud; methodical checklists",
+      "format": "markdown",
+      "license": "open book (see repo)"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "GTFOBins",
+      "url": "https://gtfobins.github.io",
+      "purpose": "Unix binaries with exploitable functionality; privesc lookup table",
+      "format": "html/markdown",
+      "license": "open"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "LOLBAS",
+      "url": "https://lolbas-project.github.io",
+      "purpose": "Windows living-off-the-land binary catalog; LOL technique lookup",
+      "format": "html/markdown",
+      "license": "open"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "PEASS-ng",
+      "url": "https://github.com/carlospolop/PEASS-ng",
+      "purpose": "Privesc enumeration checklists (LinPEAS/WinPEAS); the misconfiguration classes curriculum",
+      "format": "markdown/scripts",
+      "license": "open"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "OWASP WSTG",
+      "url": "https://owasp.org/www-project-web-security-testing-guide/",
+      "purpose": "Formal web testing methodology; test-case structure",
+      "format": "markdown",
+      "license": "CC BY-SA 4.0 (attribution required)"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "PortSwigger Web Security Academy",
+      "url": "https://portswigger.net/web-security",
+      "purpose": "Definitive free web-vuln education with hands-on labs",
+      "format": "html",
+      "license": "free educational (no bulk scraping; link and cite)"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "Exploit-DB",
+      "url": "https://www.exploit-db.com",
+      "purpose": "Public exploit archive and papers archive",
+      "format": "mixed",
+      "license": "GPL (see repo mirrors)"
+    },
+    {
+      "category": "knowledge_bases",
+      "name": "Metasploit Framework",
+      "url": "https://github.com/rapid7/metasploit-framework",
+      "purpose": "Module metadata teaches vuln taxonomy; module descriptions as training corpus",
+      "format": "ruby/yaml",
+      "license": "BSD-3"
+    },
+    {
+      "category": "structured_corpora",
+      "name": "MITRE ATT&CK STIX Data",
+      "url": "https://github.com/mitre-attack/attack-stix-data",
+      "purpose": "Full adversary-behavior ontology as JSON: technique/tactic/procedure graph - the SPINE",
+      "format": "json (STIX)",
+      "license": "BSD-3 (clean for bulk ingestion)"
+    },
+    {
+      "category": "structured_corpora",
+      "name": "CAPEC",
+      "url": "https://capec.mitre.org/data/downloads.html",
+      "purpose": "Attack-pattern taxonomy; pairs with ATT&CK",
+      "format": "xml/pdf",
+      "license": "open (attribution)"
+    },
+    {
+      "category": "structured_corpora",
+      "name": "CWE",
+      "url": "https://cwe.mitre.org/data/downloads.html",
+      "purpose": "Weakness taxonomy; the 'why it's broken' vocabulary",
+      "format": "xml/csv",
+      "license": "open (attribution)"
+    },
+    {
+      "category": "structured_corpora",
+      "name": "Atomic Red Team",
+      "url": "https://github.com/redcanaryco/atomic-red-team",
+      "purpose": "Executable technique tests as YAML (command/executor/cleanup/detection) - the TRAINER",
+      "format": "yaml",
+      "license": "MIT (clean for bulk ingestion)"
+    },
+    {
+      "category": "structured_corpora",
+      "name": "Nuclei Templates",
+      "url": "https://github.com/projectdiscovery/nuclei-templates",
+      "purpose": "~9k YAML templates encoding request->matcher logic; parseable lessons",
+      "format": "yaml",
+      "license": "MIT (clean for bulk ingestion)"
+    },
+    {
+      "category": "structured_corpora",
+      "name": "Sigma Rules",
+      "url": "https://github.com/SigmaHQ/sigma",
+      "purpose": "Detection logic per technique; the defender's view of every move",
+      "format": "yaml",
+      "license": "Detection Rule License (open use, check redistribution)"
+    },
+    {
+      "category": "feeds",
+      "name": "CISA KEV Catalog",
+      "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+      "purpose": "Vulns observed exploited in the wild - the prioritization signal",
+      "format": "json/csv",
+      "license": "US Gov public domain"
+    },
+    {
+      "category": "feeds",
+      "name": "NVD / CVE",
+      "url": "https://nvd.nist.gov",
+      "purpose": "Vulnerability database with CVSS scoring; API available",
+      "format": "json",
+      "license": "public domain"
+    },
+    {
+      "category": "methodology",
+      "name": "PTES",
+      "url": "http://www.pentest-standard.org",
+      "purpose": "Standard pentest phase model: scoping, intel, threat modeling, exploitation, reporting",
+      "format": "html",
+      "license": "open"
+    },
+    {
+      "category": "methodology",
+      "name": "NIST SP 800-115",
+      "url": "https://csrc.nist.gov/publications/detail/sp/800-115/final",
+      "purpose": "Government-standard security assessment methodology",
+      "format": "pdf",
+      "license": "public domain"
+    },
+    {
+      "category": "methodology",
+      "name": "Phrack",
+      "url": "http://phrack.org",
+      "purpose": "Complete classic exploitation paper archive; historical depth",
+      "format": "txt/html",
+      "license": "public archive (cite)"
+    },
+    {
+      "category": "gym",
+      "name": "picoCTF",
+      "url": "https://picoctf.org",
+      "purpose": "CMU's educational CTF infrastructure; safe practice targets",
+      "format": "platform",
+      "license": "educational"
+    },
+    {
+      "category": "gym",
+      "name": "OverTheWire Bandit",
+      "url": "https://overthewire.org/wargames/bandit/",
+      "purpose": "SSH wargames; trivially automatable for agentic regression tests",
+      "format": "platform",
+      "license": "educational"
+    },
+    {
+      "category": "gym",
+      "name": "cybench",
+      "url": "https://github.com/andyzorigin/cybench",
+      "purpose": "Academic benchmark of CTF tasks for evaluating AI agents - built for exactly this",
+      "format": "repo",
+      "license": "Apache-2.0 (repo moved from zhengyhn/cybench; verified live 2026-06)"
+    },
+    {
+      "category": "gym",
+      "name": "OWASP Juice Shop (localhost)",
+      "url": "https://github.com/juice-shop/juice-shop",
+      "purpose": "Vulnerable-by-design web app for local testing; run on 127.0.0.1",
+      "format": "repo",
+      "license": "MIT"
+    },
+    {
+      "category": "gym",
+      "name": "DVWA (localhost)",
+      "url": "https://github.com/digininja/DVWA",
+      "purpose": "Deliberately vulnerable web app; classic injection practice",
+      "format": "repo",
+      "license": "open"
+    },
+    {
+      "category": "gym",
+      "name": "VulnHub",
+      "url": "https://www.vulnhub.com",
+      "purpose": "Downloadable vulnerable VMs for offline lab practice",
+      "format": "vm images",
+      "license": "per-image (educational)"
+    }
+  ]
+}

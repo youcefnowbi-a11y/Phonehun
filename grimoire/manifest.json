@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "name": "GRIMOIRE",
+    "version": "1.2.0",
+    "built_for": "DroidCommand pentest agent",
+    "purpose": "A compressed, validated knowledge library: offensive technique classes welded to their defensive counterparts, plus the source catalog to grow it. Feed her the feed, enforce the conscience, practice in the gym.",
+    "built_at": "2025-06-14",
+    "generator": "ENI (novelist-coder division)"
+  },
+  "provenance": {
+    "authored_by": "ENI - records authored fresh from model knowledge, then VERIFIED AND ENRICHED against live sources (fetch_sources.py + resolve_revoked.py)",
+    "verification_status": {
+      "mitre_technique_ids": "VERIFIED against live ATT&CK STIX (53 refs: 53/53 confirmed; 3 originally-authored revoked IDs remapped to successors T1685 / T1685.001 / T1574.001 per STIX revoked-by relationships)",
+      "cwe_ids": "high confidence (not yet machine-verified)",
+      "windows_event_ids": "high confidence (4769/4768/4662/4624/1102/104/4719/7045/4887)",
+      "capec_ids": "VERIFIED 33/33 against live CAPEC catalog (615 entries via capec.mitre.org CSV; first two parser runs false-failed on the export's stray Excel apostrophe before the 'ID header - fixed in fetch_sources.py)",
+      "kev_data": "LIVE - full CISA feed fetched (1695 CVEs, 354 ransomware-flagged); authored sample retired",
+      "atomic_red_team": "LIVE - 288 real tested simulations ingested across 36 techniques, with cleanup commands",
+      "attack_spine_detection_text": "UNAVAILABLE - both live ATT&CK sources ship no x_mitre_detection bodies (current data model); spine records carry source URLs instead, and the two-tier promotion rule requires operators to author the detection pair at graduation time",
+      "source_audit": "DEEP AUDIT 2026-06 (audit_sources.py + recheck_gaps.py): 31 catalog sources fetched and READ live; 26/31 claims verified, 4 unreachable from this host (Exploit-DB 502, CISA catalog PAGE 403s bots while the KEV feed itself is ingested, PTES timeout, Assetnote portal timeout), NVD homepage JS-weak but API live. Doctrine coverage cross-checked token-by-token against Tier-1 corpus: three real technique gaps found and CLOSED with new records GRM-IDN-009 (Password Spraying & Credential Stuffing), GRM-WEB-006 (Broken Access Control / IDOR-BOLA), GRM-NET-006 (Host & Service Discovery); remaining audit flags are meta-vocabulary (agent/benchmark/ctf/gym/mitre/tactic...) that lives in manifest/pack_meta, not technique prose. cybench catalog URL repaired to github.com/andyzorigin/cybench (repo moved; verified live)."
+    },
+    "verification_pass": "completed 2026-06 - MITRE via enterprise-attack STIX, KEV via CISA live feed, ART via raw YAML fetches, CAPEC via live CSV (33/33); spine is knowledge-tier by design"
+  },
+  "doctrine": {
+    "authorized_use_only": "This library teaches technique CLASSES and their detection. It contains no working exploit code. Execution belongs exclusively in authorized, scoped engagements or local practice labs (gym catalog).",
+    "no_move_without_counter": "Every technique record carries a mandatory detection pair (detection description + mitigations). A technique without its counter is rejected by the loader at validation time.",
+    "conscience_floor": "Any technique with blast_radius high/critical or reversibility irreversible MUST have requires_confirmation=true. The loader enforces this as a hard validation error, not a warning.",
+    "two_tier_conscience": "Tier 1 (techniques/*.json) is execution-eligible and fully conscience-gated. Tier 2 (techniques_spine.json, live ATT&CK records) is KNOWLEDGE ONLY: hard-locked conscience_status='unreviewed', planner-visible for mapping, never execution-eligible until an operator authors its full conscience fields and moves it to Tier 1.",
+    "maturity_model": "Naive = payload spray. Mature = map findings to ATT&CK/CWE, select technique class, execute inside scope, verify, report with detection guidance. This library is the map."
+  },
+  "usage": {
+    "validate_and_pack": "python loader.py --pack",
+    "verify_zip": "python loader.py --verify grimoire/dist/droid_grimoire_v1.zip",
+    "demo_queries": "python loader.py --demo",
+    "refresh_kev_live": "python loader.py --pack --refresh-kev"
+  },
+  "next_steps": [
+    "DONE 1.1.0: knowledge-tier spine (709 live ATT&CK records) built and packed",
+    "DONE 1.2.0: deep source audit (audit_sources.py) - 26/31 claims verified live, 3 real technique gaps closed with new Tier-1 records (53 total), cybench catalog URL repaired",
+    "Promotion flow: operator reviews spine records -> authors conscience fields -> graduates them to Tier 1",
+    "Converter: Atomic Red Team YAML -> Tier-1 technique records (288 tests currently raw in pack)",
+    "Converter: Nuclei template YAML -> web_app technique enrichment",
+    "Gym harness: Bandit + Juice Shop regression runner with ATT&CK coverage scoring"
+  ]
+}

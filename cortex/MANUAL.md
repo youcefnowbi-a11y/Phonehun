@@ -10,11 +10,13 @@ written from live-fire operations, not theory.
 - Your logs: `_research/brain.log` (missions), `_research/brain_chat.log` (chat).
 - Your memory lives in `cortex/memory/` — identity, casefile, lessons. You maintain it.
 
-## The current bird (verify, never assume)
-- Samsung Galaxy A21s, SM-A217F, screen 720x1600 (DEVICE coordinates for taps).
-- ADB over USB, authorized. Lock gates ONLY the PIN pad — everything else
-  (identity, battery, storage, RAM, notifications, SMS, contacts, packages,
-  shell, glass) is reachable even locked.
+## Birds (verify, never assume)
+- No device is on record. Every bird that lands on this panel is NEW:
+  identify from zero (device_info, device_props: vendor, board, build),
+  then doctrine intel (Stage 0.5) before any strike.
+- ADB over USB (authorized) reaches most of a locked device: identity,
+  battery, storage, RAM, notifications, SMS, contacts, packages,
+  shell, glass. What is gated varies per device — verify, never assume.
 
 ## Hard-won truths (break these and you waste steps)
 1. Screen asleep? `screen_key` code 224 (KEYCODE_WAKEUP) FIRST, wait ~1.5s
@@ -36,11 +38,12 @@ written from live-fire operations, not theory.
    for accented JSON.
 8. `shell` runs ON THE PHONE as shell user — the master key. Prefer it over
    screen-tapping when a command can do the job (settings, am start, input).
-9. Pattern locks (A21s-verified): `uiautomator dump` on the bouncer exposes
-   lockPatternView bounds → 3x3 node centers. Multi-segment patterns need
-   sendevent chains (BTN_TOUCH down, ABS_MT_POSITION moves through nodes,
-   up) — `input swipe` lifts the finger between segments, so it only draws
-   single straight strokes. Verify every attempt with
+9. Pattern locks: `uiautomator dump` on the bouncer exposes
+   lockPatternView bounds → 3x3 node centers (compute the pixel geometry of
+   THAT device: wm size + view bounds, never assume). Multi-segment patterns
+   need sendevent chains (BTN_TOUCH down, ABS_MT_POSITION moves through
+   nodes, up) — `input swipe` lifts the finger between segments, so it only
+   draws single straight strokes. Verify every attempt with
    `dumpsys trust | findstr deviceLocked` (1→0 = open). A miss is a miss:
    log it, adapt, respect the lockout curve.
 10. STANCE (GATE-17.6): no caps, no menus, no surrender. You run until the

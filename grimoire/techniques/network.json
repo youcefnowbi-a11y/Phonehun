@@ -1,0 +1,176 @@
+{
+  "_meta": {
+    "domain": "network",
+    "code": "NET",
+    "title": "Network-Level Attacks",
+    "description": "Position and interception: spoofing, poisoning, hijacking, and the routing-tier moves that shift entire traffic flows. Maximum blast radius class - anything that redirects traffic is gated to explicit operator confirmation.",
+    "sources": [
+      "https://www.bettercap.org",
+      "https://attack.mitre.org/tactics/TA0007/",
+      "https://www.wireshark.org/#docs"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-NET-001",
+      "name": "ARP Spoofing / MITM Positioning",
+      "klass": "network_attack",
+      "mitre": ["T1557.002", "T1040"],
+      "capec": ["CAPEC-157"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Flood gratuitous ARP replies mapping the gateway's IP to your MAC; hosts send their traffic to you first. Combined with port mirroring or SSL stripping it becomes full credential capture. Purely local-segment scope, trivially detected, still effective on unmanaged networks.",
+      "detection": {
+        "description": "MAC-flapping on switch ports (same MAC bouncing across ports), gratuitous-ARP rate anomalies, duplicate IP alarms, gateway IP resolving to non-gateway MAC in host caches; DHCP starvation usually accompanies it.",
+        "mitigations": [
+          "Dynamic ARP Inspection + DHCP snooping on switches (the actual fix)",
+          "Static ARP entries for critical infrastructure pairs",
+          "802.1X to keep rogue devices off the segment",
+          "TLS everywhere - MITM position without TLS stripping is mostly metadata"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1557/002/",
+        "https://www.bettercap.org"
+      ]
+    },
+    {
+      "id": "GRM-NET-002",
+      "name": "DNS Poisoning & Spoofing",
+      "klass": "network_attack",
+      "mitre": ["T1071.004", "T1557.001"],
+      "capec": ["CAPEC-161"],
+      "cwe": ["CWE-350"],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Inject forged DNS responses: on-path guessing with transaction-ID prediction (Kaminsky-class cache poisoning), rogue DHCP DNS assignment, or local hosts manipulation. Redirects everything downstream - which is why DNSSEC and port randomization exist.",
+      "detection": {
+        "description": "Resolver analytics: unusual response source ports/addresses, TTL anomalies on popular records, NXDOMAIN bursts (subdomain enumeration is noisy in the same logs), organic lookup volume to unregistered domains via a single host.",
+        "mitigations": [
+          "DNSSEC validation on resolvers",
+          "Source-port + query-ID randomization (modern resolvers have it; audit old ones)",
+          "Split-horizon hygiene: internal resolvers forward only to trusted upstreams",
+          "Monitor for DHCP options 6 changes"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1071/004/",
+        "https://www.ietf.org/rfc/rfc5452.txt"
+      ]
+    },
+    {
+      "id": "GRM-NET-003",
+      "name": "TCP Session Hijacking & RST Attacks",
+      "klass": "network_attack",
+      "mitre": ["T1557"],
+      "capec": ["CAPEC-160"],
+      "cwe": [],
+      "difficulty": "high",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "On-path sequence-number tracking lets you inject into an established stream (desync then command injection) or send forged RSTs to kill connections (IDS evasion, VoIP/long-session disruption). Mostly a LAN or compromised-router technique in modern practice.",
+      "detection": {
+        "description": "TCP retransmission/ACK anomalies per flow (IDES-class heuristics), unexpected RST storms between specific pairs, session resumption from different source IPs, out-of-window segment counters on stateful devices.",
+        "mitigations": [
+          "Encrypted, integrity-checked sessions (TLS 1.3) - injected bytes die at the MAC check",
+          "TCP-AO for routing/infrastructure sessions",
+          "Stateful inspection devices flag out-of-window traffic"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1557/",
+        "https://www.rfc-editor.org/rfc/rfc5961"
+      ]
+    },
+    {
+      "id": "GRM-NET-004",
+      "name": "BGP Hijacking & Route Manipulation",
+      "klass": "network_attack",
+      "mitre": ["T1498.002"],
+      "capec": ["CAPEC-148"],
+      "cwe": [],
+      "difficulty": "high",
+      "reliability": "medium",
+      "blast_radius": "critical",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Announce prefixes you don't own (origin hijack) or a more-specific path (path poisoning) to attract traffic for interception or blackout. Nation-state tier: nation-states and large ASes have executed it for interception (documented incidents exist). Affects the whole internet's view, not one network.",
+      "detection": {
+        "description": "Route monitoring (RIPE RIS, RouteViews) for origin/AS-path anomalies on your prefixes, sudden geolocation shifts of inbound source, RPKI-invalid announcements, certificate pinning failures reported by clients (passive DNS + RPKI dashboards are the operational answer).",
+        "mitigations": [
+          "RPKI ROA publication for every prefix (origin validation)",
+          "ASPA (path validation) as it deploys, max-prefix limits with peers",
+          "IRR + RPKI hygiene, IRR filtering discipline on your edge",
+          "Certificate pinning in clients for crown-jewel apps (interception becomes visible)"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1498/002/",
+        "https://www.rpki.readthedocs.io"
+      ]
+    },
+    {
+      "id": "GRM-NET-005",
+      "name": "LLMNR/NBT-NS/mDNS Poisoning (Responder-class)",
+      "klass": "network_attack",
+      "mitre": ["T1557.001"],
+      "capec": ["CAPEC-157"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Answer Windows name-resolution fallback queries (typo'd hostnames, WPAD lookups) claiming to be anything, capturing NetNTLMv1/v2 hashes from the victims. The classic first 20 minutes of an internal engagement - capture, crack offline, or relay upstream (welds directly to the NTLM relay technique).",
+      "detection": {
+        "description": "Multiple hosts answering LLMNR/NBT-NS queries (legitimate: zero extra responders), WPAD resolution anomalies, EID 4625/4776 auth bursts to a single host after name queries, RDP/HTTP auth attempts to hosts with no service.",
+        "mitigations": [
+          "Disable LLMNR/NBT-NS via GPO (the actual fix; no legitimate modern need)",
+          "Disable WPAD; DNS globally suffices",
+          "SMB signing everywhere (blocks the relay half)",
+          "Network IDS signatures for responder traffic patterns"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1557/001/",
+        "https://book.hacktricks.xyz/generic-methodologies-and-resources/pentesting-network"
+      ]
+    },
+    {
+      "id": "GRM-NET-006",
+      "name": "Host & Service Discovery (Network Scanning)",
+      "klass": "network_attack",
+      "mitre": ["T1046", "T1018", "T1595"],
+      "capec": ["CAPEC-300"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "low",
+      "reversibility": "full",
+      "requires_confirmation": false,
+      "summary": "The first move of nearly every real engagement: ICMP sweeps, ARP discovery on the local segment, SYN/connect scans for listening services, version fingerprints to pick targets. Read-class by nature - but scanning is NOT harmless: known-naive connect scans have hard-crashed printers, OT/ICS gear, and fragile legacy services, so scope and rate discipline are operational safety, not courtesy. Outside the engagement scope a scan is indistinguishable from pre-attack recon, which is the whole reason defenders instrument for it.",
+      "detection": {
+        "description": "Shape, not signature: one source touching many ports on one host, or many hosts on one port - both are scan shapes visible in Zeek/Suricata scan detectors and firewall deny spikes; Windows sides show EID 5156 connect-storm patterns; honeypot canaries (unused RFC1918 space, decoy services) give certain-signal alerts; sudden DNS/ARP sweep traffic marks host-discovery phases; asset-inventory diffs flag services that appear where none were.",
+        "mitigations": [
+          "Deny-by-default east-west segmentation - shrink what any scan can even see",
+          "Canary nets and decoy hosts on every segment; any touch is a high-fidelity alert",
+          "NAC (802.1X) so only managed endpoints get a routable identity",
+          "Baseline inventory + anomaly alerting on new listening services"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1046/",
+        "https://nmap.org/book/"
+      ]
+    }
+  ]
+}

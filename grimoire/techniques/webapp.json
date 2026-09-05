@@ -1,0 +1,177 @@
+{
+  "_meta": {
+    "domain": "webapp",
+    "code": "WEB",
+    "title": "Web Application Attacks",
+    "description": "The modern frontier: the vuln classes that own the public internet, from server-side request forgery to logic abuse. Every technique here is taught end-to-end for free in PortSwigger's Academy, and every one has a first-class fix.",
+    "sources": [
+      "https://portswigger.net/web-security",
+      "https://owasp.org/www-project-top-ten/",
+      "https://attack.mitre.org/tactics/TA0001/"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-WEB-001",
+      "name": "Server-Side Request Forgery (SSRF)",
+      "klass": "web_attack",
+      "mitre": ["T1190"],
+      "capec": ["CAPEC-664"],
+      "cwe": ["CWE-918"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Make the server issue requests of your choosing: hit cloud metadata (169.254.169.254 - instant IAM credentials), pivot into internal-only services, scan the RFC1918 space from inside. The cloud-era killer because the metadata endpoint hands over role credentials to anyone who can make the host talk to itself.",
+      "detection": {
+        "description": "Egress logs from app tier to link-local/metadata addresses, DNS for internal hostnames initiated by app processes, unusual URL schemes in request parameters (file://, gopher://), WAF rules for metadata IPs, canary tokens on metadata endpoints.",
+        "mitigations": [
+          "IMDSv2 (token-required, hop-limit) on all cloud instances - the definitive metadata fix",
+          "Egress allowlists from app tier (default deny to RFC1918 + link-local)",
+          "URL validation against allowlist schemes/hosts; never accept raw URLs from users",
+          "Separate network zones so app compromise does not equal internal reach"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/web-security/ssrf",
+        "https://hackingthe.cloud/aws/general-knowledge/ssrf/"
+      ]
+    },
+    {
+      "id": "GRM-WEB-002",
+      "name": "Path Traversal & Local File Inclusion",
+      "klass": "web_attack",
+      "mitre": ["T1190"],
+      "capec": ["CAPEC-126"],
+      "cwe": ["CWE-22", "CWE-98"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Read (and sometimes execute) arbitrary files by walking out of a sanitized path: ../../../etc/passwd, encoded variants (%2e%2e%2f), PHP filters (php://filter/convert.base64-encode/resource=index), null bytes in legacy parsers. LFI plus log poisoning or session files crosses into RCE.",
+      "detection": {
+        "description": "WAF traversal-pattern rules, application errors revealing file paths, anomalous access to /etc/, win.ini, web.config from app logs, high volume of 200s on deep-dot segments, php:// filter strings in access logs.",
+        "mitigations": [
+          "Never build paths from user input - map IDs to fixed paths server-side (the real fix)",
+          "Chroot/containerize file access for the app user",
+          "Deny-list directories at the web server layer as a second wall",
+          "Least-privilege service accounts (can't read what the account can't read)"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/web-security/file-path-traversal",
+        "https://owasp.org/www-community/attacks/Path_Traversal"
+      ]
+    },
+    {
+      "id": "GRM-WEB-003",
+      "name": "Authentication & Session Logic Abuse",
+      "klass": "logic_flaw",
+      "mitre": ["T1110", "T1550"],
+      "capec": ["CAPEC-114", "CAPEC-60"],
+      "cwe": ["CWE-287", "CWE-384"],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "The soft, high-yield class: broken session validation (predictable tokens, missing rotation on privilege change), mass assignment to role fields, JWT alg=none/key confusion, reset-link enumeration, 2FA logic gaps (response manipulation, brute-forceable OTP windows, missing step-up). Rarely toolable - it is reasoning work, which is exactly why it survives.",
+      "detection": {
+        "description": "Login-success anomalies per account (impossible-travel, new-ASN), session token reuse across IPs, JWT validation errors in app logs, password-reset bursts against one account from distributed sources, 2FA-step error-rate anomalies.",
+        "mitigations": [
+          "Framework auth (battle-tested) over hand-rolled; deny-by-default route guards",
+          "Session rotation on login AND privilege change; short lifetimes; secure flags",
+          "JWT: strict alg allowlist, aud/iss validation, short exp",
+          "Rate-limit and alert on reset flows; number-linked OTP validation server-side"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/web-security/authentication",
+        "https://owasp.org/www-project-web-security-testing-guide/"
+      ]
+    },
+    {
+      "id": "GRM-WEB-004",
+      "name": "Race Conditions & Cache Poisoning",
+      "klass": "logic_flaw",
+      "mitre": ["T1499"],
+      "capec": ["CAPEC-26", "CAPEC-74"],
+      "cwe": ["CWE-362", "CWE-444"],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Race the server's check-then-act windows with synchronized requests (HTTP/2 single-packet racing made this practical: 20 requests in one packet), or poison a shared cache by smuggling an unkeyed header (X-Forwarded-Host, X-Original-URL) so every subsequent user receives your payload. Web-cache poisoning is site-wide impact from a single request.",
+      "detection": {
+        "description": "Request-burst analytics (identical requests within one server tick), duplicate-resource errors (double-spend signatures in payment logs), cache-content drift (same URL serving different bodies to different users), header-anomaly WAF rules.",
+        "mitigations": [
+          "Idempotency keys and DB unique constraints (the race's real fix)",
+          "Cache: minimize keyed-header deviations, Vary correctly, prefix cache keys with host",
+          "H2/H3 connection-window limits server-side; normalize duplicate headers",
+          "Surrogate-control discipline; cache-purge runbooks"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/web-security/race-conditions",
+        "https://portswigger.net/web-security/web-cache-poisoning"
+      ]
+    },
+    {
+      "id": "GRM-WEB-005",
+      "name": "Client-Side Web Attacks (XSS / CSRF / Prototype Pollution)",
+      "klass": "web_attack",
+      "mitre": ["T1189", "T1056"],
+      "capec": ["CAPEC-63", "CAPEC-62"],
+      "cwe": ["CWE-79", "CWE-352", "CWE-1321"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Attacks that run in the victim's browser: stored/reflected XSS (script executes with the victim's privileges), CSRF (cross-site state-change on authenticated sessions), and DOM/prototype pollution (JS gadget chains in frameworks like jQuery/Lodash). XSS is the gateway to session theft, keylogging, and same-origin pivoting.",
+      "detection": {
+        "description": "DOM sandbox alerts, CSP violation reports (a real telemetry source), WAF script-tag payloads, unexpected outbound connections to user-controlled domains from browsers, account-activity anomalies following reported phishing.",
+        "mitigations": [
+          "CSP with nonces (defeats inline XSS) + trusted-types for DOM sinks",
+          "Output encoding by context (HTML/attr/JS/URL) via templating engines",
+          "SameSite=Lax/Strict cookies + CSRF tokens on state-changing routes",
+          "Prototype pollution: freeze Object.prototype in sensitive apps, audit deep-merge libraries"
+        ]
+      },
+      "references": [
+        "https://portswigger.net/web-security/cross-site-scripting",
+        "https://owasp.org/www-community/attacks/xss/"
+      ]
+    },
+    {
+      "id": "GRM-WEB-006",
+      "name": "Broken Access Control (IDOR / BOLA)",
+      "klass": "web_application_attack",
+      "mitre": [],
+      "capec": ["CAPEC-1"],
+      "cwe": ["CWE-639", "CWE-285"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": false,
+      "summary": "The server asks 'does this session exist' but never 'does this session OWN this object' - so /api/invoices/1043 becomes /api/invoices/1044 and another tenant's data walks out. IDOR at object level (BOLA in the OWASP API Top 10), forced-browse at function level, parameter tampering for privilege lifts. Consistently ranked the #1 real-world web risk because it needs no payload, no injection break, no crash - just a horizontal walk an authorization layer never checked. Mostly read-class, which is why it escapes blast-radius gating while still being the quietest data breach in the catalog.",
+      "detection": {
+        "description": "Application logs must capture session-user AND accessed object-id, then correlate: one session touching a wide, distinct set of object ids is enumeration; canary objects (honey-records with unique ids per user) turn IDOR into a certain-signal tripwire; WSTG 4.1 authorization test matrix run in CI catches the class pre-deploy; API-gateway anomaly on 200-with-foreign-object patterns where the app logs both fields.",
+        "mitigations": [
+          "Deny-by-default server-side authorization per object - never trust client-supplied object ownership",
+          "Framework-level scoping: ORM row-level filters instead of view-level checks",
+          "Per-role integration tests that assert both allow AND deny paths",
+          "Non-guessable object ids (UUIDv4+) as friction, never as the control"
+        ]
+      },
+      "references": [
+        "https://capec.mitre.org/data/definitions/1.html",
+        "https://portswigger.net/web-security/access-control"
+      ]
+    }
+  ]
+}

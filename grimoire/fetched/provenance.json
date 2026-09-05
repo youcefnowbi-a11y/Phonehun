@@ -1,0 +1,23 @@
+{
+ "fetched_at": "2026-09-06T01:02:06",
+ "sources": [
+  {
+   "name": "CAPEC CSV",
+   "url": "https://capec.mitre.org/data/csv/2000.csv.zip",
+   "method": "https",
+   "sha256": "2b6f3949ba2db202",
+   "bytes": 382556
+  },
+  {
+   "name": "CAPEC CSV",
+   "url": "https://capec.mitre.org/data/csv/2000.csv.zip",
+   "method": "https",
+   "sha256": "2b6f3949ba2db202",
+   "bytes": 382556
+  }
+ ],
+ "notes": [],
+ "summary": {
+  "capec_verification": "done"
+ }
+}

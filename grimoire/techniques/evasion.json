@@ -1,0 +1,145 @@
+{
+  "_meta": {
+    "domain": "evasion",
+    "code": "EVS",
+    "title": "Defense Evasion",
+    "description": "The art of not being seen: process injection flavors, AMSI/ETW tampering, syscalls, and living off the land. Taught here inseparably from its tripwires - a tool that learns a move learns its alarm.",
+    "sources": [
+      "https://attack.mitre.org/tactics/TA0005/",
+      "https://github.com/redcanaryco/atomic-red-team",
+      "https://github.com/SigmaHQ/sigma"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-EVS-001",
+      "name": "Process Injection (Hollowing / APC / Thread Hijack)",
+      "klass": "evasion",
+      "mitre": ["T1055", "T1055.003", "T1055.004"],
+      "capec": ["CAPEC-565"],
+      "cwe": ["CWE-420"],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Write code into another process's memory and execute it there: hollow a legitimate process's image (replace entry content), queue APC to an alertable thread, or hijack thread context. Runs under a trusted binary's identity - the classic pairing with every initial-access payload.",
+      "detection": {
+        "description": "Cross-process memory writes (Sysmon EID 8/10, EDR); RWX private regions in unexpected processes; svchost/notepad with writable executable memory; thread start addresses outside the loaded image; parent-child anomalies.",
+        "mitigations": [
+          "EDR behavioral coverage (injection telemetry beats signature), Sysmon EID 8/10 baseline",
+          "CFG / XFG, arbitrary code guard on browsers",
+          "Block credential-theft-relevant processes from injection via exploit protection"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1055/",
+        "https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1055/"
+      ]
+    },
+    {
+      "id": "GRM-EVS-002",
+      "name": "AMSI Bypass",
+      "klass": "evasion",
+      "mitre": ["T1685"],
+      "capec": [],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Patch the amsi!AmsiScanBuffer return value or the provider's_dll!_CanLoad branch so script content is scanned-and-forgiven. Standard prelude to any PowerShell/JS tradecraft; every red team course teaches the current variant. Short lifecycle per bypass - each known patch gets blocked and a new one is found.",
+      "detection": {
+        "description": "Access to amsi.dll memory from managed processes (ETW), EDR hooks on VirtualProtect targeting amsi.dll, PowerShell transcription logging surviving (bypass does not disable transcription), module-unhook signals; block known patch byte-patterns at EDR.",
+        "mitigations": [
+          "PowerShell Constrained Language Mode + transcription + script-block logging (all three)",
+          "EDR/AMSI tamper telemetry (patch attempts are themselves high-signal)",
+          "Latest .NET/AMSI updates; don't rely on AMSI alone as a control"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1562/001/",
+        "https://github.com/SigmaHQ/sigma"
+      ]
+    },
+    {
+      "id": "GRM-EVS-003",
+      "name": "ETW Patching & Log Tampering",
+      "klass": "evasion",
+      "mitre": ["T1685.001", "T1070"],
+      "capec": [],
+      "cwe": ["CWE-778"],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Patch the EtwEventWrite provider registration or clear logs (wevtutil cl, audit policy flips, timestomping with $FILE_NAME vs $STANDARD_INFORMATION mismatch). Blinding telemetry is the tell that the operator expects to do worse things next - treat as force-multiplier alert, not noise.",
+      "detection": {
+        "description": "EtwEventWrite patch attempts (EDR kernel callbacks), log-clear EIDs (1102, 104), audit policy change EIDs (4719), timestomping detection ($SI/$FN delta via NTFS analysis), service/telemetry process termination by unexpected callers.",
+        "mitigations": [
+          "Forward logs off-host in near-real-time (the only real answer to local clearing)",
+          "Tamper-protected EDR (self-protection), protected event log (RFC 5849-style wrapping)",
+          "Alert on any 1102/104/4719 - these should be rare organizational events"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1562/002/",
+        "https://attack.mitre.org/techniques/T1070/"
+      ]
+    },
+    {
+      "id": "GRM-EVS-004",
+      "name": "Direct Syscalls & Unhooking (ntdll Refresh)",
+      "klass": "evasion",
+      "mitre": ["T1106", "T1685"],
+      "capec": [],
+      "cwe": [],
+      "difficulty": "high",
+      "reliability": "high",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Skip hooked user-land APIs entirely: resolve syscall numbers (SSN) from a clean ntdll copy (mapped fresh from disk or the KnownDlls section) or via Hell's Gate/Halo's Gate, then issue syscalls directly - EDR user-mode hooks never see the traffic. This is the modern baseline for offensive tooling and the reason userland hooking alone is not a defense.",
+      "detection": {
+        "description": "Kernel-side telemetry is the counter: ETW Ti provider, minifilter file events, syscall anomalies (direct syscalls still hit kernel callbacks), memory regions with RWX and executable syscalls, indirect-syscall stack-spoofing artifacts (return address outside loaded images).",
+        "mitigations": [
+          "Assume userland hooks fail; invest in kernel telemetry + behavioral analytics",
+          "Call-stack analysis for return addresses outside known images",
+          "Flow-based rather than API-based detections (e.g. 'a process read LSASS memory', regardless of API used)"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1106/",
+        "https://maldevacademy.com"
+      ]
+    },
+    {
+      "id": "GRM-EVS-005",
+      "name": "Living Off the Land (Signed Binary Proxy Execution)",
+      "klass": "evasion",
+      "mitre": ["T1218", "T1218.011"],
+      "capec": [],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Abuse signed native tools as proxies: rundll32 executing export ordinals, mshta rendering remote HTA, regsvr32 /i:http, InstallUtil, msbuild inline-task builds, bitsadmin/certutil for transfer. No malware on disk - the LOLBins are the malware, and LOLBas/GTFOBins catalog them exhaustively.",
+      "detection": {
+        "description": "Command-line analytics (Sysmon EID 1): office/document apps spawning LOLBins, LOLBins with network URLs in arguments, rundll32 without .dll arguments, mshta spawning children; netconn anomalies (EID 3) from binaries that never legitimately call out.",
+        "mitigations": [
+          "Block LOLB in document/browser context via ASR rules",
+          "WDAC allowlisting makes unsigned-argument abuse moot on hardened fleets",
+          "Command-line audit + Sigma coverage on the standard abuse arguments"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1218/",
+        "https://lolbas-project.github.io"
+      ]
+    }
+  ]
+}

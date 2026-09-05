@@ -1,0 +1,43 @@
+{
+ "_provenance": {
+  "fetched_at": "2026-09-06T01:02:06",
+  "url": "https://capec.mitre.org/data/csv/2000.csv.zip",
+  "catalog_size": 615,
+  "verified": true
+ },
+ "library_capec_status": {
+  "CAPEC-100": "verified:Overflow Buffers",
+  "CAPEC-114": "verified:Authentication Abuse",
+  "CAPEC-122": "verified:Privilege Abuse",
+  "CAPEC-126": "verified:Path Traversal",
+  "CAPEC-148": "verified:Content Spoofing",
+  "CAPEC-157": "verified:Sniffing Attacks",
+  "CAPEC-160": "verified:Exploit Script-Based APIs",
+  "CAPEC-161": "verified:Infrastructure Manipulation",
+  "CAPEC-186": "verified:Malicious Software Update",
+  "CAPEC-201": "verified:Serialized Data External Linking",
+  "CAPEC-240": "verified:Resource Injection",
+  "CAPEC-26": "verified:Leveraging Race Conditions",
+  "CAPEC-416": "verified:Manipulate Human Behavior",
+  "CAPEC-433": "verified:Target Influence via The Human Buffer Overflow",
+  "CAPEC-555": "verified:Remote Services with Stolen Credentials",
+  "CAPEC-558": "verified:Replace Trusted Executable",
+  "CAPEC-565": "verified:Password Spraying",
+  "CAPEC-586": "verified:Object Injection",
+  "CAPEC-591": "verified:Reflected XSS",
+  "CAPEC-60": "verified:Reusing Session IDs (aka Session Replay)",
+  "CAPEC-62": "verified:Cross Site Request Forgery",
+  "CAPEC-63": "verified:Cross-Site Scripting (XSS)",
+  "CAPEC-633": "verified:Token Impersonation",
+  "CAPEC-634": "verified:Probe Audio and Video Peripherals",
+  "CAPEC-635": "verified:Alternative Execution Due to Deceptive Filenames",
+  "CAPEC-641": "verified:DLL Side-Loading",
+  "CAPEC-65": "verified:Sniff Application Code",
+  "CAPEC-66": "verified:SQL Injection",
+  "CAPEC-664": "verified:Server Side Request Forgery",
+  "CAPEC-679": "verified:Exploitation of Improperly Configured or Implemented Memory Protections",
+  "CAPEC-74": "verified:Manipulating State",
+  "CAPEC-88": "verified:OS Command Injection",
+  "CAPEC-98": "verified:Phishing"
+ }
+}

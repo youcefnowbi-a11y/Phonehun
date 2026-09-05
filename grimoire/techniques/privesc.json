@@ -1,0 +1,149 @@
+{
+  "_meta": {
+    "domain": "privesc",
+    "code": "PRV",
+    "title": "Privilege Escalation & Post-Exploitation",
+    "description": "From foothold to system/root: kernel LPE, token manipulation, service misconfigurations, and the living-off-the-land binaries that make both operating systems into their own exploit kits.",
+    "sources": [
+      "https://github.com/carlospolop/PEASS-ng",
+      "https://lolbas-project.github.io",
+      "https://gtfobins.github.io"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-PRV-001",
+      "name": "Kernel / OS-Level LPE Exploits",
+      "klass": "privilege_escalation",
+      "mitre": ["T1068"],
+      "capec": ["CAPEC-122"],
+      "cwe": ["CWE-250"],
+      "difficulty": "high",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Public kernel exploits (PrintNightmare-class, Dirty Pipe, catch-all driver primitives) turn user-land footholds into SYSTEM/root. The reliability game is patch-level fingerprinting: knowing which kernel build is vulnerable before firing anything.",
+      "detection": {
+        "description": "Kernel driver load events from user paths (Sysmon EID 6), suspicious named-pipe activity around spooler/services, process token changes, EDR alerts on known exploit tooling signatures (Printspoofer, etc.).",
+        "mitigations": [
+          "Patch cadence - the real fix",
+          "Unprivileged driver load blocking, Microsoft Vulnerable Driver Blocklist",
+          "Restrict Spooler service on non-print servers",
+          "Credential Guard and VBS raise the floor"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1068/",
+        "https://github.com/carlospolop/PEASS-ng"
+      ]
+    },
+    {
+      "id": "GRM-PRV-002",
+      "name": "Service Misconfiguration Escalation (Path, ACL, Unquoted)",
+      "klass": "privilege_escalation",
+      "mitre": ["T1574.009", "T1574.011"],
+      "capec": ["CAPEC-122"],
+      "cwe": ["CWE-428", "CWE-276"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Services running as SYSTEM with: unquoted binary paths (C:\\Program Files\\Vendor\\svc.exe hijacks to C:\\Program.exe), weak ACLs on the service or its binary (ChangeServiceConfig via accesschk), or world-writable directories in the DLL search order. Enumeration is cheap; the misconfigurations are endemic.",
+      "detection": {
+        "description": "Service binary path writes by non-SYSTEM principals (Sysmon EID 11 on service directories), service reconfiguration events (EID 7045/4697), accesschk/BeClass-class enumeration tooling process starts.",
+        "mitigations": [
+          "Quote every service binary path (deployment lint rule)",
+          "icacls audit on service directories; ACL should be SYSTEM/Administrators write-only",
+          "Monitor EID 7045 for new service installs by non-admins"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1574/009/",
+        "https://www.fuzzysecurity.com/tutorials/16.html"
+      ]
+    },
+    {
+      "id": "GRM-PRV-003",
+      "name": "Token Impersonation & UAC Bypass",
+      "klass": "privilege_escalation",
+      "mitre": ["T1134", "T1548.002"],
+      "capec": ["CAPEC-633"],
+      "cwe": ["CWE-250"],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Steal or impersonate primary/impersonation tokens of privileged processes (SeImpersonate abuse via Potato-class token coercion, or named-pipe token capture), and abuse auto-elevate binaries (fodhelper, computerdefaults) to skip the UAC prompt when in a high-integrity-eligible context.",
+      "detection": {
+        "description": "Named-pipe creation by unusual processes, token privilege assignments (EID 4673), auto-elevate binary spawning with command-line arguments pointing to temp (Sysmon EID 1 lineage: fodhelper.exe -> cmd.exe), potato-class tool signatures.",
+        "mitigations": [
+          "Remove SeImpersonatePrivilege from service accounts that don't need it",
+          "UAC set to 'Always Notify' (blocks most auto-elevate abuse)",
+          "EDR lineage rules on auto-elevate binaries",
+          "Credential Guard, and patch Potato-class vectors (they ride legitimate DCOM/RPC behaviors)"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1134/",
+        "https://attack.mitre.org/techniques/T1548/002/"
+      ]
+    },
+    {
+      "id": "GRM-PRV-004",
+      "name": "DLL Search Order Hijacking & Side-Loading",
+      "klass": "privilege_escalation",
+      "mitre": ["T1574.001"],
+      "capec": ["CAPEC-641"],
+      "cwe": ["CWE-427"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Plant a malicious DLL in a directory searched before the legitimate one, or proxy a legitimate signed binary's imports (side-load via version.dll, winmm.dll in a known-vulnerable signed app). The signed-binary variant doubles as defense evasion, which is why it survives so long in the wild.",
+      "detection": {
+        "description": "Sysmon EID 7 (image load) - DLLs loaded from user-writable paths, unsigned DLLs loaded by signed processes, new DLL writes into application directories (EID 11); known-abused binaries appearing in odd contexts.",
+        "mitigations": [
+          "Set DLL directory to absolute, use SetDefaultDllDirectories where possible",
+          "Code-signing requirement on loaded modules for high-value apps",
+          "ACL application directories to admin-write-only",
+          "EDR image-load rules for user-path loads by privileged processes"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1574/001/",
+        "https://lolbas-project.github.io"
+      ]
+    },
+    {
+      "id": "GRM-PRV-005",
+      "name": "Linux SUID / Capabilities / Cron / PATH Abuse",
+      "klass": "privilege_escalation",
+      "mitre": ["T1548.001", "T1053.003"],
+      "capec": ["CAPEC-122"],
+      "cwe": ["CWE-732"],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "The classic Unix ladder: SUID binaries with shell escapes (GTFOBins is literally a lookup table), file capabilities (cap_setuid on an interpreter), world-writable cron scripts, PATH shadowing in root-invoked scripts, and sudo rules with NOPASSWD on interpreters or wildcards.",
+      "detection": {
+        "description": "auditd execve with euid=0 from unexpected binaries; new SUID binaries appearing (file integrity monitoring, e.g. AIDE); cron edits by non-root; sudo invocations with unusual arguments (sudoers EID-logging via sudoers audit plugin).",
+        "mitigations": [
+          "File integrity monitoring for SUID drift; scheduled SUID inventory diffs",
+          "sudo: NOEXEC/arg restriction, no NOPASSWD on interpreters, secure_path enforced",
+          "Cron scripts: absolute paths, root-owned directories, chattr on stable scripts",
+          "Remove file capabilities not required at runtime (getcap -r / sweep)"
+        ]
+      },
+      "references": [
+        "https://gtfobins.github.io",
+        "https://attack.mitre.org/techniques/T1548/001/"
+      ]
+    }
+  ]
+}

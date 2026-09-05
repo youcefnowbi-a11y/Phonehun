@@ -1,0 +1,20 @@
+{
+ "_provenance": {
+  "source": "https://github.com/mitre-attack/attack-stix-data/releases/latest/download/enterprise-attack.json",
+  "note": "resolved from STIX revoked-by relationships"
+ },
+ "resolutions": {
+  "T1562.001": {
+   "replaced_by": "T1685",
+   "replacement_name": "Disable or Modify Tools"
+  },
+  "T1562.002": {
+   "replaced_by": "T1685.001",
+   "replacement_name": "Disable or Modify Windows Event Log"
+  },
+  "T1574.002": {
+   "replaced_by": "T1574.001",
+   "replacement_name": "DLL"
+  }
+ }
+}

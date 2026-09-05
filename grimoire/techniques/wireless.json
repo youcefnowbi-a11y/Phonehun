@@ -1,0 +1,123 @@
+{
+  "_meta": {
+    "domain": "wireless",
+    "code": "WRL",
+    "title": "Wireless & Physical Proximity",
+    "description": "The layer where the network leaves the cable: Wi-Fi attacks, SDR, and short-range credential emulation. Physical access is root access, and radio is physical access at a distance.",
+    "sources": [
+      "https://www.aircrack-ng.org/doku.php",
+      "https://attack.mitre.org/tactics/TA0001/",
+      "https://docs.hak5.org"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-WRL-001",
+      "name": "WPA/WPA2 Handshake Capture & Offline Crack",
+      "klass": "wireless_attack",
+      "mitre": ["T1556", "T1040"],
+      "capec": ["CAPEC-634"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Deauthenticate a client to force a 4-way handshake rekey, capture it passively, then crack the PMK-derived material offline against a wordlist (or against a stolen PMKID - deauth not even required on many APs). PSK networks with human passwords fall; enterprise networks do not (different attack surface).",
+      "detection": {
+        "description": "Deauth frame floods (WIDS flags them instantly), handshake capture correlation, PMKID request frames to the AP from foreign MACs; wireless IDS is the entire game here - wired monitoring sees nothing.",
+        "mitigations": [
+          "WPA2-Enterprise/WPA3-SAE instead of PSK wherever humanly possible",
+          "Wireless IDS/IPS (deauth detection is standard)",
+          "Long random PSKs where PSK must remain (20+ chars, no human words)",
+          "802.11w management frame protection (makes deauth much harder)"
+        ]
+      },
+      "references": [
+        "https://www.aircrack-ng.org/doku.php?id=cracking_wpa",
+        "https://attack.mitre.org/techniques/T1556/"
+      ]
+    },
+    {
+      "id": "GRM-WRL-002",
+      "name": "Evil Twin / Rogue AP",
+      "klass": "wireless_attack",
+      "mitre": ["T1557.002"],
+      "capec": ["CAPEC-635"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Clone a legitimate SSID on stronger signal; devices auto-associate (and auto-join wins over the real AP). Capture credentials via a cloned captive portal, strip TLS with user help, or simply MITM everything. The captive-portal phishing variant is nearly indistinguishable to untrained users.",
+      "detection": {
+        "description": "Same SSID from multiple BSSIDs, sudden signal-strength competition, clients authenticating twice (once to real AP, once to twin), TLS interception alerts from pinned apps, WIDS rogue-AP classification.",
+        "mitigations": [
+          "Certificate validation everywhere (HSTS preload, pinned enterprise apps)",
+          "WIDS with rogue containment",
+          "Client-side: enterprise profile with CA pinning (never trust a new cert silently)",
+          "User training: verify captive portal legitimacy (look for the specific internal hostname)"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1557/002/",
+        "https://www.aircrack-ng.org/doku.php"
+      ]
+    },
+    {
+      "id": "GRM-WRL-003",
+      "name": "SDR Attacks (Signal Replay / Rolling Code)",
+      "klass": "wireless_attack",
+      "mitre": ["T1556"],
+      "capec": ["CAPEC-634"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Capture and replay RF signals (gate remotes, key fobs, TPMS, some alarm systems) with a $30 RTL-SDR or HackRF; fixed-code protocols replay instantly, rolling-code systems fall to predictive/capture-while-jamming. The physical world's analog of credential replay.",
+      "detection": {
+        "description": "Physical-layer anomalies (RF spectrum monitoring is rare outside critical facilities), unexpected unlock events in access logs, jamming complaints (the jam-then-capture signature), rolling-code sync drift (fob stops working - the user reports it).",
+        "mitigations": [
+          "Rolling-code + challenge-response protocols (modern fobs); retire fixed-code devices",
+          "Faraday storage for high-value fobs where threat model warrants",
+          "RF monitoring at critical facilities",
+          "Physical access logging + anomaly review (unlock without corresponding badge event)"
+        ]
+      },
+      "references": [
+        "https://www.rtl-sdr.com",
+        "https://attack.mitre.org/techniques/T1556/"
+      ]
+    },
+    {
+      "id": "GRM-WRL-004",
+      "name": "HID Injection / BadUSB-class Device Attack",
+      "klass": "physical_attack",
+      "mitre": ["T1200"],
+      "capec": ["CAPEC-186"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "A USB device enumerating as HID keyboard types scripted commands in seconds (Rubber Ducky-class): open a shell, phone home, done. The host cannot distinguish it from a real keyboard by protocol; only behavioral policy catches it. Physical access plus user curiosity equals initial access.",
+      "detection": {
+        "description": "HID device insertion followed immediately by Win+R / terminal keystrokes (Sysmon EID 1 with new devices in EID 2001-2003 correlation), keystroke cadence inhumanly fast, devices appearing in USB history on hosts whose users report no insertion.",
+        "mitigations": [
+          "USB device control policy (allowlist vendor/product, block HID where not required)",
+          "Lock screens everywhere - the attack needs an unlocked session",
+          "User awareness (unfound USB sticks are the delivery mechanism)",
+          "Endpoint hardening so one HID payload cannot chain (CLM, ASR, no auto-elevate)"
+        ]
+      },
+      "references": [
+        "https://docs.hak5.org/hak5-usb-rubber-ducky",
+        "https://attack.mitre.org/techniques/T1200/"
+      ]
+    }
+  ]
+}

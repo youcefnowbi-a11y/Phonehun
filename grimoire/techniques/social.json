@@ -1,0 +1,96 @@
+{
+  "_meta": {
+    "domain": "social",
+    "code": "SOC",
+    "title": "Social Engineering & Physical Access",
+    "description": "The oldest exploit and still the highest-ROI attack in existence: humans, trust, and the physical layer. Every defensive control here is a process control - technology barely helps, which is exactly why her knowledge base needs it.",
+    "sources": [
+      "https://attack.mitre.org/tactics/TA0001/",
+      "https://www.social-engineer.org/framework/",
+      "https://pages.nist.gov/800-63-3/sp800-63b.html"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-SOC-001",
+      "name": "Phishing & Spear Phishing Infrastructure",
+      "klass": "social_engineering",
+      "mitre": ["T1566.001", "T1566.002"],
+      "capec": ["CAPEC-98"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Weaponized email: credential-harvest clones, macro documents, link-t0-evil-twin-portal chains. The infrastructure game (lookalike domains, SPF/DKIM/DMARC pass-through via lookalikes, MFA-aware reverse proxies like Evilginx-class tooling that proxy the real login and steal the session cookie) is what separates spray-and-pray from targeted compromise.",
+      "detection": {
+        "description": "Lookalike-domain registrations (dnstwist-class monitoring as defense), impossible-travel logins, session-cookie replay from novel ASNs (the reverse-proxy tell), mailbox-rule creation post-login, report-button volume as the human sensor.",
+        "mitigations": [
+          "Phishing-resistant MFA (FIDO2/WebAuthn) - session theft dies here (proxied logins get useless)",
+          "DMARC enforcement (p=reject) + lookalike-domain monitoring",
+          "User report-button culture with fast feedback loops",
+          "Conditional access: device compliance + location heuristics"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1566/001/",
+        "https://www.social-engineer.org/framework/"
+      ]
+    },
+    {
+      "id": "GRM-SOC-002",
+      "name": "Vishing, MFA Fatigue & Helpdesk Social Engineering",
+      "klass": "social_engineering",
+      "mitre": ["T1621", "T1566"],
+      "capec": ["CAPEC-416"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Voice-first compromise: MFA-push spam until approval (fatigue), helpdesk password resets against a confident voice with a name and employee-adjacent details (the MGM-class pattern), SIM-swap to own SMS-based MFA. The 2023 casino breaches made this the textbook modern initial access.",
+      "detection": {
+        "description": "MFA push denial-rate spikes per user (denials are telemetry: report the fatigue attempt), repeated reset requests per identity, helpdesk verification failures in tickets, SIM-swap indicators (carrier alerts, sudden SMS silence followed by failed logins).",
+        "mitigations": [
+          "Number matching in MFA push (kills blind-approve fatigue)",
+          "Helpdesk verification: manager + ticket + video or identity-proofing for resets - zero voice-only resets for privileged accounts",
+          "FIDO2 over push/SMS wherever possible; carrier-level SIM-swap locks",
+          "Log and alert every MFA denial"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1621/",
+        "https://pages.nist.gov/800-63-3/sp800-63b.html"
+      ]
+    },
+    {
+      "id": "GRM-SOC-003",
+      "name": "Pretexting & Physical Intrusion (Tailgating, Badge Cloning)",
+      "klass": "social_engineering",
+      "mitre": ["T1200"],
+      "capec": ["CAPEC-416"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Physical access is root access: tailgating behind badge holders, cloned HID-seucer credentials (the classic low-frequency 125 kHz cards clone with a $30 device), delivery-person pretexts, conference-room installs. Once inside: network drops in conference rooms, posted passwords, unattended laptops.",
+      "detection": {
+        "description": "Badge-in without badge-out pairs, door-forced-open alarms, anti-passback violations, camera-review flags (no visible human at badge events), unknown MACs on internal drops, physical access anomalies correlated with logical anomalies.",
+        "mitigations": [
+          "Mantrap entries, security-desk badge verification, anti-passback enforcement",
+          "Upgrade to high-frequency smart credentials (SEOS-class) or mobile credentials",
+          "Network-drop 802.1X (a plugged-in cable is not access)",
+          "Clean-desk policy, screen-lock enforcement, visitor escort culture"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1200/",
+        "https://www.social-engineer.org/framework/"
+      ]
+    }
+  ]
+}

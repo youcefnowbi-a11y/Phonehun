@@ -1,0 +1,255 @@
+{
+  "_meta": {
+    "domain": "identity",
+    "code": "IDN",
+    "title": "Identity & Directory Attacks",
+    "description": "The modern crown-jewel domain: Active Directory, Kerberos, NTLM, and enterprise SSO. Where enterprises actually fall. Every technique here is documented in public certification curricula and mapped to its defensive control.",
+    "sources": [
+      "https://adsecurity.org",
+      "http://www.harmj0y.net/blog/",
+      "https://attack.mitre.org/tactics/TA0006/"
+    ]
+  },
+  "techniques": [
+    {
+      "id": "GRM-IDN-001",
+      "name": "Kerberoasting",
+      "klass": "identity_attack",
+      "mitre": ["T1558.003"],
+      "capec": ["CAPEC-555"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Request service tickets (TGS) for accounts with SPNs; the ticket is encrypted with the service account's NTLM hash, so it can be cracked offline at leisure. No admin rights needed to request tickets - any domain user can enumerate and roast. Weak service-account passwords fall in minutes.",
+      "detection": {
+        "description": "Windows EID 4769 with RC4 (0x17) encryption and no 4768 in the same session; abnormal volume of TGS requests from a single principal in a short window; RC4 tickets are themselves legacy-flagged.",
+        "mitigations": [
+          "25+ character random passwords on all service accounts, or gMSA (group Managed Service Accounts)",
+          "Disable RC4 where possible; enforce AES",
+          "Alert on 4769 RC4 request bursts; tiered admin model keeps service accounts out of Domain Admins"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1558/003/",
+        "https://adsecurity.org/?p=2011"
+      ]
+    },
+    {
+      "id": "GRM-IDN-002",
+      "name": "AS-REP Roasting",
+      "klass": "identity_attack",
+      "mitre": ["T1558.004"],
+      "capec": ["CAPEC-555"],
+      "cwe": [],
+      "difficulty": "low",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "full",
+      "requires_confirmation": true,
+      "summary": "Accounts with 'Do not require Kerberos preauthentication' return an AS-REP encrypted with the user's own key to anyone who asks - offline crackable, no credentials needed at all. The misconfiguration is older-domain legacy and quiet, so enumeration finds surprises.",
+      "detection": {
+        "description": "EID 4768 with pre-auth type 0 (no preauth); volume of AS requests against accounts that normally never authenticate interactively; hashcat-mode 18200 activity indicators from EDR on endpoints.",
+        "mitigations": [
+          "Audit and clear the UF_DONT_REQUIRE_PREAUTH flag - it should be false on every account",
+          "Strong passphrases / gMSA as backstop",
+          "Alert on 4768 preauth-missing events"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1558/004/",
+        "https://adsecurity.org/?p=1667"
+      ]
+    },
+    {
+      "id": "GRM-IDN-003",
+      "name": "Pass-the-Hash / Pass-the-Ticket",
+      "klass": "identity_attack",
+      "mitre": ["T1550.002", "T1550.003"],
+      "capec": ["CAPEC-65"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "partial",
+      "requires_confirmation": true,
+      "summary": "Replay stolen credential material without ever knowing the password: NTLM hash passed directly to authentication, or a captured Kerberos ticket injected into a new session. Lateral movement with zero credential cracking - the reason credential theft beats password attacks in real engagements.",
+      "detection": {
+        "description": "EID 4624 logon type 3 (network) with NTLM where host normally uses Kerberos; ticket reuse across hosts within a ticket lifetime (same logon ID, different source machines); abnormal NTLM traffic between workstations (workstation-to-workstation NTLM is nearly always lateral movement).",
+        "mitigations": [
+          "Credential Guard (isolates LSASS secrets via virtualization)",
+          "Tiered admin model - admin credentials never touch non-tier-0 hosts",
+          "Restricted Admin Mode / Remote Credential Guard for RDP",
+          "Disable NTLM where feasible; else NTLM auditing and SMB signing"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1550/002/",
+        "https://adsecurity.org/?p=1667"
+      ]
+    },
+    {
+      "id": "GRM-IDN-004",
+      "name": "DCSync Replication Abuse",
+      "klass": "identity_attack",
+      "mitre": ["T1003.006"],
+      "capec": ["CAPEC-558"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Hold 'Replicating Directory Changes' rights (or steal a DC's trust) and ask a domain controller to replicate password hashes directly - every account in the domain, including krbtgt. The endgame move: with krbtgt's hash you forge golden tickets. Treat as game-over, not a checkpoint.",
+      "detection": {
+        "description": "EID 4662 'Replicating Directory Changes' access by non-DC principals; replication attempts to member workstations; Get-ReplicationChanges API calls from unexpected sources. DC-to-workstation replication is a definitive alert.",
+        "mitigations": [
+          "Audit 'Replicating Directory Changes' ACEs - only DCs and sanctioned tools should hold them",
+          "Tier 0 isolation for DCs (no interactive logon by non-DC admins)",
+          "After compromise: krbtgt password reset TWICE (the interval rule) - and plan for it in IR"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1003/006/",
+        "https://adsecurity.org/?p=1729"
+      ]
+    },
+    {
+      "id": "GRM-IDN-005",
+      "name": "Golden / Silver Ticket Forgery",
+      "klass": "identity_attack",
+      "mitre": ["T1558.001", "T1558.002"],
+      "capec": ["CAPEC-558"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "With krbtgt's NTLM hash, mint offline-valid TGTs for any identity, any group, ten-year lifetime - golden tickets that outlive the compromise that created them. Silver tickets (service-account hash) forge TGS for one service with no DC contact at all, making them quieter and harder to correlate.",
+      "detection": {
+        "description": "Ticket anomalies: lifetime violations, missing PAC, or PAC signature mismatches; EID 4769 requests for services with no prior 4768 TGT issuance; tickets referencing accounts with no corresponding domain activity. Full detection is hard - the durability of the artifact is the point.",
+        "mitigations": [
+          "Protect krbtgt hash: tier-0 hygiene, DCSync defense, dual krbtgt password rotation post-incident",
+          "Restrict service-account privilege; any account whose hash is stolen silvers only that one service",
+          "PAC signature validation and ticket-lifetime anomaly tooling (e.g. defcon/BlueHive-class log analysis)"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1558/001/",
+        "https://adsecurity.org/?p=1640"
+      ]
+    },
+    {
+      "id": "GRM-IDN-006",
+      "name": "NTLM Relay (incl. ESC8 Web Enrollment)",
+      "klass": "identity_attack",
+      "mitre": ["T1557", "T1649"],
+      "capec": ["CAPEC-591"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "medium",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Relay an authenticated NTLM handshake to another service that accepts it: coerce a machine to authenticate to the attacker (Printerbug, PetitPotam) and forward to LDAP/SMB/AD-CS web enrollment. Signing/sealing (SMB, LDAP) blocks it; plain HTTP endpoints (AD CS CertSrv) do not, which is why ESC8 became the modern kill chain's favorite door.",
+      "detection": {
+        "description": "Coercion indicators: machine-triggered authentication to unusual hosts (EID 4625/4776 correlation, MS-EFSR/MS-RPRN calls logged via Sysmon EID 3 to non-standard destinations); relay signatures: NTLM auth to ADCS/LDAP from a workstation address that should never do so.",
+        "mitigations"
+: [
+          "Enable SMB and LDAP signing/sealing everywhere (the fundamental fix)",
+          "Disable NTLM entirely or restrict to explicit allowlist; disable ADCS HTTP enrollment or require Kerberos/EPA",
+          "Patch coercion vectors (PetitPotam fix) and disable Print Spooler on servers not needing it",
+          "Extended Protection for Authentication (EPA) on AD CS"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1557/",
+        "https://support.microsoft.com/en-us/topic/kb5005413"
+      ]
+    },
+    {
+      "id": "GRM-IDN-007",
+      "name": "AD CS Misconfiguration Abuse (ESC1-ESC8)",
+      "klass": "identity_attack",
+      "mitre": ["T1558", "T1649"],
+      "capec": ["CAPEC-558"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "critical",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Certificate templates misconfigured (ENROLLEE_SUPPLIES_SUBJECT, low-ACL enrollment, manager-approval gaps, HTTP-only enrollment) let any domain user mint certificates impersonating privileged principals - authentication that bypasses password policy entirely and leaves no NTLM/LM artifacts.",
+      "detection": {
+        "description": "Certification Authority audit (EID 4887/4899) showing enrollment for privileged templates from non-privileged callers; issued certificates with SAN mismatches; Certipy/Locksmith-style audit tooling run on a schedule is itself the primary defense because detection in-flight is weak.",
+        "mitigations": [
+          "Run Locksmith / PSPKIAudit - remediate template ACLs and flag settings (ESC1-8 checklist is now a standard hardening task)",
+          "Disable ENROLLEE_SUPPLIES_SUBJECT unless a template truly requires it",
+          "Enforce manager approval + authorized signatures on high-privilege templates",
+          "Kill HTTP enrollment (EPA required) - closes ESC8 and the relay kill chain together"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1649/",
+        "https://book.hacktricks.xyz/windows-hardening/active-directory-services/ad-cs-certificates"
+      ]
+    },
+    {
+      "id": "GRM-IDN-008",
+      "name": "ACL & Delegation Abuse (BloodHound Paths)",
+      "klass": "identity_attack",
+      "mitre": ["T1098", "T1484"],
+      "capec": ["CAPEC-558"],
+      "cwe": [],
+      "difficulty": "medium",
+      "reliability": "high",
+      "blast_radius": "high",
+      "reversibility": "irreversible",
+      "requires_confirmation": true,
+      "summary": "Enterprise AD is a graph of forgotten permissions: GenericAll on a user (shadow credential / target kerberoast), WriteDacl on a group, DCSync rights on an OU, unconstrained or resource-based constrained delegation letting a machine impersonate anyone to a target service. BloodHound made these paths computable - which cuts both ways, and the defensive use is the same tool.",
+      "detection": {
+        "description": "EID 5136 (directory object changes) on privileged objects; new SPNs set on accounts (delegation staging); certificate-based shadow-credential activity (EID 4887 msDS-KeyCredentialLink writes);BloodHound collection itself is visible - SharpHound sessions from non-audit hosts should alert.",
+        "mitigations": [
+          "BloodHound run defensively on a schedule - find your own attack paths before they do",
+          "Strip unsanctioned ACEs from tier-0 objects; tiered admin model",
+          "Restrict delegation: no unconstrained delegation outside cluster needs, RBCD scoping documented",
+          "EID 5136 auditing on privileged containers"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1098/",
+        "https://github.com/BloodHoundAD/BloodHound"
+      ]
+    },
+    {
+      "id": "GRM-IDN-009",
+      "name": "Password Spraying & Credential Stuffing",
+      "klass": "identity_attack",
+      "mitre": ["T1110.003", "T1110.004"],
+      "capec": ["CAPEC-16", "CAPEC-49"],
+      "cwe": ["CWE-307"],
+      "difficulty": "low",
+      "reliability": "medium",
+      "blast_radius": "medium",
+      "reversibility": "full",
+      "requires_confirmation": false,
+      "summary": "The anti-pattern of brute force: one or two very common passwords rotated across many usernames (spraying), or replaying breach-corpus credential pairs (stuffing). Auth failures blend into baseline noise, so the move trades loudness per account for breadth across accounts - which is also exactly the shape defenders hunt for. Noisy-but-recoverable by doctrine; the blast lands as account lockouts and alert fatigue.",
+      "detection": {
+        "description": "Breadth-over-rate heuristic: single source IP/session generating EID 4625/4771 failures across MANY distinct accounts is spraying, even at low rate; lockout spikes (EID 4740) cluster downstream; Entra ID sign-in risk detections and breach-password match telemetry flag stuffing at cloud IdPs; watch for distributed-source sprays via fail2ban-style correlation and geovelocity anomalies.",
+        "mitigations": [
+          "Phishing-resistant MFA (FIDO2) - renders stolen passwords inert",
+          "Smart lockout that splits per-user and per-source thresholds (avoids the lockout-DoS side effect)",
+          "Breached-password screening and deny-lists at password change, not just login",
+          "Conditional access with device compliance for legacy-protocol exemptions kept to zero"
+        ]
+      },
+      "references": [
+        "https://attack.mitre.org/techniques/T1110/003/",
+        "https://attack.mitre.org/techniques/T1110/004/"
+      ]
+    }
+  ]
+}

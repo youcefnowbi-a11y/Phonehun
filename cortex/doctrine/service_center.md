@@ -24,7 +24,7 @@ EXIST and ADB IS ALWAYS ON. Knox warranty stays 0x0 (signed firmware).
 Data on userdata is DESTROYED. That is the price. Say it once, plainly.
 
 ### Stage 1 — fingerprint the target (all from ADB, even locked)
-- `shell getprop ro.product.model` → e.g. SM-A217F
+- `shell getprop ro.product.model` → e.g. SM-A515F
 - `shell getprop ro.build.version.incremental` + `ro.build.fingerprint`
   → build number + security patch level
 - `shell getprop ro.boot.warrantybit` / `warranty_bit` → Knox state

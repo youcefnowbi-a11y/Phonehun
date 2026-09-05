@@ -18,7 +18,8 @@ tier: core
 5. Ground truth still wins over pixels: `dumpsys` service "window"
    (mCurrentFocus / mDreamingLockscreen) or
    `shell dumpsys window | findstr mCurrentFocus`. Pixels + numbers together.
-6. Coordinates are DEVICE-space: 720 wide x 1600 tall on the A21s.
+6. Coordinates are DEVICE-space: read the real resolution per device
+   (`wm size`) — never assume any fixed number.
    The center of the screen is (360, 800). Bottom third starts at y>1050.
 7. After every tap: capture again. Verify, never assume.
 

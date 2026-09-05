@@ -1,0 +1,545 @@
+{
+ "_provenance": {
+  "audited_at": "2026-09-06T01:16:42",
+  "method": "live fetch of raw content per source; claim keywords + evidence extraction + tier-1 corpus coverage check",
+  "sources_checked": 31
+ },
+ "sources": [
+  {
+   "name": "SecLists",
+   "url": "https://raw.githubusercontent.com/danielmiessler/SecLists/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "seclists",
+    "wordlist"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "wordlist"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "PayloadsAllTheThings",
+   "url": "https://raw.githubusercontent.com/swisskyrepo/PayloadsAllTheThings/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "payload"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "HackTricks",
+   "url": "https://book.hacktricks.xyz",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "hacktricks",
+    "pentest"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [],
+   "gap_in_library": [
+    "privesc"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "GTFOBins",
+   "url": "https://gtfobins.github.io",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "gtfobins",
+    "sudo"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "privilege",
+    "sudo",
+    "unix"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "LOLBAS",
+   "url": "https://lolbas-project.github.io",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "lolbas",
+    "living off the land"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "living off the land"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "PEASS-ng",
+   "url": "https://raw.githubusercontent.com/carlospolop/PEASS-ng/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "peass",
+    "privilege escalation"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "misconfiguration",
+    "privilege escalation"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "OWASP WSTG",
+   "url": "https://owasp.org/www-project-web-security-testing-guide/",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "web security testing"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "PortSwigger Web Security Academy",
+   "url": "https://portswigger.net/web-security",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "web security",
+    "sql injection"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "race condition",
+    "sql",
+    "ssrf"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "Exploit-DB",
+   "url": "https://www.exploit-db.com",
+   "error": "HTTPError: HTTP Error 502: Bad Gateway"
+  },
+  {
+   "name": "Metasploit Framework",
+   "url": "https://raw.githubusercontent.com/rapid7/metasploit-framework/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "metasploit"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "MITRE ATT&CK STIX Data",
+   "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "stix",
+    "attack"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "mitre",
+    "tactic",
+    "technique"
+   ],
+   "gap_in_library": [
+    "mitre",
+    "tactic"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "Atomic Red Team",
+   "url": "https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "atomic",
+    "test"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "test"
+   ],
+   "gap_in_library": [
+    "simulation"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "Nuclei Templates",
+   "url": "https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "nuclei",
+    "template"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "cve",
+    "template"
+   ],
+   "gap_in_library": [
+    "webapp"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "Sigma Rules",
+   "url": "https://raw.githubusercontent.com/SigmaHQ/sigma/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "sigma",
+    "detection",
+    "siem"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "detection",
+    "event",
+    "log"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "CISA KEV Catalog",
+   "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+   "error": "HTTPError: HTTP Error 403: Forbidden"
+  },
+  {
+   "name": "NVD / CVE",
+   "url": "https://nvd.nist.gov",
+   "http_status": 200,
+   "claim_keywords_found": [],
+   "claim_holds": false,
+   "evidence_in_source": [],
+   "gap_in_library": [
+    "cvss",
+    "vulnerability"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "PTES",
+   "url": "http://www.pentest-standard.org",
+   "error": "URLError: <urlopen error timed out>"
+  },
+  {
+   "name": "NIST SP 800-115",
+   "url": "https://csrc.nist.gov/pubs/sp/800/115/final",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "800-115",
+    "assessment"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "assessment"
+   ],
+   "gap_in_library": [
+    "assessment",
+    "methodology"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "Phrack",
+   "url": "http://phrack.org",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "phrack",
+    "magazine"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "exploitation"
+   ],
+   "gap_in_library": [
+    "memory corruption"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "picoCTF",
+   "url": "https://picoctf.org",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "picoctf"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "ctf"
+   ],
+   "gap_in_library": [
+    "ctf",
+    "gym"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "OverTheWire Bandit",
+   "url": "https://overthewire.org/wargames/bandit/",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "bandit",
+    "wargame"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "ssh"
+   ],
+   "gap_in_library": [
+    "gym",
+    "ssh"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "cybench",
+   "url": "https://raw.githubusercontent.com/andyzorigin/cybench/main/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "cybench",
+    "benchmark"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "agent",
+    "benchmark",
+    "ctf"
+   ],
+   "gap_in_library": [
+    "agent",
+    "benchmark",
+    "ctf"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "OWASP Juice Shop",
+   "url": "https://raw.githubusercontent.com/juice-shop/juice-shop/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "juice shop",
+    "vulnerab"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "owasp",
+    "practice"
+   ],
+   "gap_in_library": [
+    "webapp"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "DVWA",
+   "url": "https://raw.githubusercontent.com/digininja/DVWA/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "dvwa",
+    "damn vulnerable"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "injection",
+    "practice"
+   ],
+   "gap_in_library": [
+    "webapp"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "VulnHub",
+   "url": "https://www.vulnhub.com",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "vulnhub",
+    "virtual machine"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "lab",
+    "vm"
+   ],
+   "gap_in_library": [
+    "vm"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "Probable-Wordlists",
+   "url": "https://raw.githubusercontent.com/berzerk0/Probable-Wordlists/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "probable",
+    "password"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "credential",
+    "password"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "fuzzdb",
+   "url": "https://raw.githubusercontent.com/fuzzdb-project/fuzzdb/master/README.md",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "fuzz"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "discovery",
+    "payload"
+   ],
+   "gap_in_library": [],
+   "coverage_ratio": 1.0
+  },
+  {
+   "name": "Kali wordlists package",
+   "url": "https://www.kali.org/tools/wordlists/",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "wordlist",
+    "kali"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "credential",
+    "rockyou",
+    "wordlist"
+   ],
+   "gap_in_library": [
+    "rockyou"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "CWE (downloads)",
+   "url": "https://cwe.mitre.org/data/downloads.html",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "cwe",
+    "weakness"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "cwe",
+    "weakness"
+   ],
+   "gap_in_library": [
+    "weakness"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "CAPEC (downloads)",
+   "url": "https://capec.mitre.org/data/downloads.html",
+   "http_status": 200,
+   "claim_keywords_found": [
+    "capec",
+    "attack pattern"
+   ],
+   "claim_holds": true,
+   "evidence_in_source": [
+    "attack pattern",
+    "capec"
+   ],
+   "gap_in_library": [
+    "attack pattern"
+   ],
+   "coverage_ratio": 0.5
+  },
+  {
+   "name": "Assetnote Wordlists",
+   "url": "https://wordlists.assetnote.io",
+   "error": "URLError: <urlopen error timed out>"
+  }
+ ],
+ "summary": {
+  "claims_verified": "26/31",
+  "full_coverage": "15/31",
+  "doctrine_token_gaps": {
+   "privesc": [
+    "HackTricks"
+   ],
+   "mitre": [
+    "MITRE ATT&CK STIX Data"
+   ],
+   "tactic": [
+    "MITRE ATT&CK STIX Data"
+   ],
+   "simulation": [
+    "Atomic Red Team"
+   ],
+   "webapp": [
+    "Nuclei Templates",
+    "OWASP Juice Shop",
+    "DVWA"
+   ],
+   "cvss": [
+    "NVD / CVE"
+   ],
+   "vulnerability": [
+    "NVD / CVE"
+   ],
+   "assessment": [
+    "NIST SP 800-115"
+   ],
+   "methodology": [
+    "NIST SP 800-115"
+   ],
+   "memory corruption": [
+    "Phrack"
+   ],
+   "ctf": [
+    "picoCTF",
+    "cybench"
+   ],
+   "gym": [
+    "picoCTF",
+    "OverTheWire Bandit"
+   ],
+   "ssh": [
+    "OverTheWire Bandit"
+   ],
+   "agent": [
+    "cybench"
+   ],
+   "benchmark": [
+    "cybench"
+   ],
+   "vm": [
+    "VulnHub"
+   ],
+   "rockyou": [
+    "Kali wordlists package"
+   ],
+   "weakness": [
+    "CWE (downloads)"
+   ],
+   "attack pattern": [
+    "CAPEC (downloads)"
+   ]
+  },
+  "recheck_note": "gaps recomputed as substrings against tier-1 corpus text (audit v1 word-set check falsely flagged multi-word phrases)"
+ }
+}

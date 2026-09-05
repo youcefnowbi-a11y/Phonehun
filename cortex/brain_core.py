@@ -929,6 +929,16 @@ def _budget_cascade(msgs, budget_tok):
                 msgs[i]["content"] = c[:4000] + "\n…[compacted — context budget]"
 
 
+def _max_chat_steps_safe(cfg):
+    try:
+        return int(cfg.get("max_chat_steps") or 20)
+    except (TypeError, ValueError):
+        return 20
+
+
+max_chat_steps_safe = _max_chat_steps_safe
+
+
 def status():
     cfg = load_config()
     with _LOCK:
@@ -938,6 +948,8 @@ def status():
             "final": BRAIN["final"], "error": BRAIN["error"],
             "objective": BRAIN["objective"], "chat_last": BRAIN["chat_last"],
             "chat_turns": len([m for m in CHAT_HISTORY if m["role"] == "user"]),
+            "max_chat_steps": max_chat_steps_safe(cfg),
+            "plays": _pb.play_count(),
             "inbox_pending": BRAIN["inbox"].qsize(),
             "started_at": BRAIN["started_at"],
             "provider": cfg.get("provider"), "model": cfg.get("model"),

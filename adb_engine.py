@@ -217,8 +217,11 @@ class ADBEngine:
     def get_memory_info(self):
         res = self.shell("cat /proc/meminfo")
         # BUG 19 FIX: Initialize all keys the frontend expects
-        mem = {"total_mb": 0, "free_mb": 0, "available_mb": 0, "used_mb": 0, "used_pct": 0}
+        # fix: used_pct starts None — only reported once available memory is known (item 11)
+        mem = {"total_mb": 0, "free_mb": 0, "available_mb": 0, "used_mb": 0, "used_pct": None}
         if res["success"]:
+            buffers_mb = 0
+            cached_mb = 0
             for line in res["stdout"].splitlines():
                 if "MemTotal:" in line:
                     val = re.search(r'(\d+)', line)
@@ -229,7 +232,19 @@ class ADBEngine:
                 elif "MemAvailable:" in line:
                     val = re.search(r'(\d+)', line)
                     if val: mem["available_mb"] = round(int(val.group(1)) / 1024, 1)
+                elif "Buffers:" in line:
+                    # fix: fallback inputs for kernels without MemAvailable (item 11)
+                    val = re.search(r'(\d+)', line)
+                    if val: buffers_mb = round(int(val.group(1)) / 1024, 1)
+                elif "Cached:" in line and "SwapCached:" not in line:
+                    # fix: fallback inputs for kernels without MemAvailable (item 11)
+                    val = re.search(r'(\d+)', line)
+                    if val: cached_mb = round(int(val.group(1)) / 1024, 1)
+            if not mem["available_mb"]:
+                # fix: MemFree+Buffers+Cached fallback (item 11)
+                mem["available_mb"] = round(mem["free_mb"] + buffers_mb + cached_mb, 1)
             mem["used_mb"] = round(mem["total_mb"] - mem["available_mb"], 1)
-            if mem["total_mb"] > 0:
+            if mem["total_mb"] > 0 and mem["available_mb"] > 0:
+                # fix: used_pct None when even the fallback is missing (item 11)
                 mem["used_pct"] = round((mem["used_mb"] / mem["total_mb"]) * 100, 1)
         return mem

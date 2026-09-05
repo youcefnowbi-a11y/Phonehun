@@ -33,12 +33,19 @@ window.Glass = (function () {
     } catch (e) {}
   }
 
+  let frameInFlight = false;  // fix: single-flight — slow frames never stack
+  let frameBacklog = false;   // fix: trailing request coalesced while in flight
+  let frameReady = false;     // fix: gestures stay inert until the first frame paints
+
   async function fetchFrame() {
+    if (!img) return;
+    if (frameInFlight) { frameBacklog = true; return; }
     if (!STATE.devices || STATE.devices.length === 0) {
       showEmptyState(true);
       return;
     }
 
+    frameInFlight = true;
     try {
       const serial = STATE.activeSerial;
       const q = serial ? `?serial=${encodeURIComponent(serial)}` : '';
@@ -53,6 +60,7 @@ window.Glass = (function () {
         const url = URL.createObjectURL(blob);
         img.onload = () => {
           URL.revokeObjectURL(url);
+          frameReady = true;
           if (img.naturalWidth && img.naturalHeight) {
             deviceResolution.width = img.naturalWidth;
             deviceResolution.height = img.naturalHeight;
@@ -65,10 +73,17 @@ window.Glass = (function () {
       }
     } catch (e) {
       showEmptyState(true);
+    } finally {
+      frameInFlight = false;
+      if (frameBacklog) {
+        frameBacklog = false;
+        fetchFrame();
+      }
     }
   }
 
   function showEmptyState(show) {
+    if (!img) return;  // fix: element guard — one missing node must not throw every tick
     if (show) {
       img.style.display = 'none';
       if (emptyState) emptyState.style.display = 'flex';
@@ -76,6 +91,18 @@ window.Glass = (function () {
       img.style.display = 'block';
       if (emptyState) emptyState.style.display = 'none';
     }
+  }
+
+  let frameRefreshTimer = null;
+  function scheduleFrameRefresh(delay) {
+    // fix: single trailing refresh — rapid taps never stack setTimeout fetches
+    if (frameRefreshTimer) clearTimeout(frameRefreshTimer);
+    frameRefreshTimer = setTimeout(() => { frameRefreshTimer = null; fetchFrame(); }, delay);
+  }
+
+  function pumpFrame() {
+    // fix: skip painting while the tab is hidden — the wire rests with the operator
+    if (!document.hidden) fetchFrame();
   }
 
   function toggleStream() {
@@ -87,7 +114,8 @@ window.Glass = (function () {
       }
       updateResolution();
       fetchFrame();
-      streamTimer = setInterval(fetchFrame, 750);
+      if (streamTimer) clearInterval(streamTimer);  // fix: never double-arm the pump
+      streamTimer = setInterval(pumpFrame, 750);
       pushFlow('INFO', 'Screen streaming initiated.');
     } else {
       if (streamBtn) {
@@ -99,6 +127,22 @@ window.Glass = (function () {
       pushFlow('INFO', 'Screen streaming paused.');
     }
   }
+
+  function onHide() {
+    // fix: pause the frame pump whenever the glass deck loses the stage
+    if (streamTimer) { clearInterval(streamTimer); streamTimer = null; }
+  }
+
+  function onShow() {
+    if (isStreaming && !streamTimer && !document.hidden) {
+      streamTimer = setInterval(pumpFrame, 750);
+    }
+    fetchFrame();
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) onHide(); else onShow();
+  });
 
   // Calculate pixel-perfect device coordinates taking object-fit: contain into account
   function getDeviceCoordinates(clientX, clientY) {
@@ -138,6 +182,7 @@ window.Glass = (function () {
 
   function onPointerDown(e) {
     if (!img || img.style.display === 'none') return;
+    if (!frameReady) return;  // fix: no gestures against a placeholder resolution
     e.preventDefault();
 
     pointerActive = true;
@@ -184,7 +229,7 @@ window.Glass = (function () {
             serial: STATE.activeSerial
           })
         });
-        setTimeout(fetchFrame, 300);
+        scheduleFrameRefresh(300);
       } catch (err) {
         console.warn('Tap error:', err);
       }
@@ -203,7 +248,7 @@ window.Glass = (function () {
             serial: STATE.activeSerial
           })
         });
-        setTimeout(fetchFrame, 400);
+        scheduleFrameRefresh(400);
       } catch (err) {
         console.warn('Swipe error:', err);
       }
@@ -250,15 +295,16 @@ window.Glass = (function () {
       await api('/api/screen/swipe', {
         method: 'POST',
         body: JSON.stringify({
-          x1: 360,
-          y1: 1300,
-          x2: 360,
-          y2: 300,
+          // fix: derive from real device resolution — no more hardcoded 720x1600
+          x1: Math.round(deviceResolution.width / 2),
+          y1: Math.round(deviceResolution.height * 0.8),
+          x2: Math.round(deviceResolution.width / 2),
+          y2: Math.round(deviceResolution.height * 0.18),
           duration: 250,
           serial: STATE.activeSerial
         })
       });
-      setTimeout(fetchFrame, 400);
+      scheduleFrameRefresh(400);
     } catch (e) {
       pushFlow('ALERT', 'Swipe up failed');
     }
@@ -273,7 +319,7 @@ window.Glass = (function () {
           serial: STATE.activeSerial
         })
       });
-      setTimeout(fetchFrame, 400);
+      scheduleFrameRefresh(400);
     } catch (e) {
       pushFlow('ALERT', `Keyevent ${keyCode} failed`);
     }
@@ -282,15 +328,16 @@ window.Glass = (function () {
   async function typeText() {
     const input = prompt('Enter text to type onto device:');
     if (!input) return;
+    const text = input.slice(0, 512);  // fix: cap — prompt() is uncapped
     try {
       await api('/api/screen/text', {
         method: 'POST',
         body: JSON.stringify({
-          text: input,
+          text: text,
           serial: STATE.activeSerial
         })
       });
-      setTimeout(fetchFrame, 500);
+      scheduleFrameRefresh(500);
     } catch (e) {
       pushFlow('ALERT', 'Type text failed');
     }
@@ -333,8 +380,7 @@ window.Glass = (function () {
     sendKey,
     typeText,
     triggerTouchVisual,
-    onShow: () => {
-      fetchFrame();
-    }
+    onShow,
+    onHide
   };
 })();

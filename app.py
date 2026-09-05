@@ -8,6 +8,7 @@ import re
 import secrets
 import time
 from pathlib import Path
+from urllib.parse import quote
 from flask import Flask, render_template, request, jsonify, send_file, Response, after_this_request, send_from_directory
 from werkzeug.utils import secure_filename
 
@@ -85,6 +86,19 @@ cm = CommsManager(adb)
 sc = SystemControls(adb)
 tk = ToolkitManager(adb)
 deep = DeepAccess(adb)
+
+# fix: shared guarded int cast for client-supplied numerics — junk input
+# falls back to the default instead of raising ValueError -> 500.
+def _to_int(v, default, lo=None, hi=None):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return default
+    if lo is not None and n < lo:
+        n = lo
+    if hi is not None and n > hi:
+        n = hi
+    return n
 
 def cleanup_temp_file(filepath):
     @after_this_request
@@ -205,16 +219,21 @@ def upload_file():
 
 @app.route("/api/files/delete", methods=["POST"])
 def delete_file():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     path = data.get("path")
     if not path:
         return jsonify({"error": "Path required"}), 400
+    # fix: rm -rf scoping — reject traversal, relative paths, and anything
+    # outside /sdcard and its subdirectories before it reaches the manager.
+    if ".." in path or not path.startswith("/") \
+            or not (path == "/sdcard" or path.startswith("/sdcard/")):
+        return jsonify({"success": False, "error": "Path out of scope"}), 400
     res = fm.delete_item(path)
     return jsonify(res)
 
 @app.route("/api/files/mkdir", methods=["POST"])
 def make_directory():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     path = data.get("path")
     if not path:
         return jsonify({"error": "Path required"}), 400
@@ -223,7 +242,7 @@ def make_directory():
 
 @app.route("/api/files/rename", methods=["POST"])
 def rename_file():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     old_path = data.get("old_path")
     new_path = data.get("new_path")
     if not old_path or not new_path:
@@ -290,7 +309,7 @@ def install_app():
 
 @app.route("/api/apps/uninstall", methods=["POST"])
 def uninstall_app():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pkg = data.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
@@ -298,7 +317,7 @@ def uninstall_app():
 
 @app.route("/api/apps/launch", methods=["POST"])
 def launch_app():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pkg = data.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
@@ -306,7 +325,7 @@ def launch_app():
 
 @app.route("/api/apps/stop", methods=["POST"])
 def stop_app():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pkg = data.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
@@ -314,7 +333,7 @@ def stop_app():
 
 @app.route("/api/apps/clear", methods=["POST"])
 def clear_app():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pkg = data.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
@@ -325,6 +344,8 @@ def extract_app():
     pkg = request.args.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
+    # fix: temp file cleanup on failure is owned by AppManager.extract_apk
+    # (out-of-scope file); the send path here can't leak the artifact.
     res = am.extract_apk(pkg)
     if res["success"] and Path(res["local_path"]).exists():
         return send_file(res["local_path"], as_attachment=True, download_name=res["filename"])
@@ -405,14 +426,14 @@ def take_screenshot():
 
 @app.route("/api/system/tap", methods=["POST"])
 def send_tap():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     x = data.get("x", 0)
     y = data.get("y", 0)
     return jsonify(sc.tap(x, y))
 
 @app.route("/api/system/swipe", methods=["POST"])
 def send_swipe():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     x1 = data.get("x1", 0)
     y1 = data.get("y1", 0)
     x2 = data.get("x2", 0)
@@ -422,25 +443,25 @@ def send_swipe():
 
 @app.route("/api/system/key", methods=["POST"])
 def send_key():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     code = data.get("code", 3)
     return jsonify(sc.send_key(code))
 
 @app.route("/api/system/text", methods=["POST"])
 def send_text():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     text = data.get("text", "")
     return jsonify(sc.type_text(text))
 
 @app.route("/api/system/url", methods=["POST"])
 def open_url():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     url = data.get("url", "")
     return jsonify(sc.open_url(url))
 
 @app.route("/api/system/reboot", methods=["POST"])
 def reboot_device():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     mode = data.get("mode", "normal")
     return jsonify(sc.reboot(mode))
 
@@ -460,7 +481,7 @@ def toolkit_security_audit():
 
 @app.route("/api/toolkit/unlock-pin", methods=["POST"])
 def toolkit_unlock_pin():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pin = data.get("pin", "")
     return jsonify(tk.attempt_pin_unlock(pin))
 
@@ -486,7 +507,7 @@ def toolkit_bloatware():
 
 @app.route("/api/toolkit/bloatware/disable", methods=["POST"])
 def toolkit_bloatware_disable():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pkg = data.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
@@ -494,7 +515,7 @@ def toolkit_bloatware_disable():
 
 @app.route("/api/toolkit/bloatware/restore", methods=["POST"])
 def toolkit_bloatware_restore():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     pkg = data.get("package")
     if not pkg:
         return jsonify({"error": "Package required"}), 400
@@ -506,19 +527,19 @@ def toolkit_hardware():
 
 @app.route("/api/toolkit/vibrate", methods=["POST"])
 def toolkit_vibrate():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     duration = data.get("duration", 500)
     return jsonify(tk.trigger_vibration(duration))
 
 @app.route("/api/toolkit/brightness", methods=["POST"])
 def toolkit_brightness():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     level = data.get("level", 150)
     return jsonify(tk.set_brightness(level))
 
 @app.route("/api/toolkit/record-screen", methods=["POST"])
 def toolkit_record_screen():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     sec = data.get("duration", 5)
     res = tk.record_screen(sec)
     if res["success"]:
@@ -531,7 +552,7 @@ def toolkit_frida_scripts():
 
 @app.route("/api/toolkit/tweak", methods=["POST"])
 def toolkit_tweak():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     key = data.get("tweak")
     if not key:
         return jsonify({"error": "Tweak key required"}), 400
@@ -557,7 +578,7 @@ def deep_settings_get():
 
 @app.route("/api/deep/settings/put", methods=["POST"])
 def deep_settings_put():
-    d = request.get_json() or {}
+    d = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     try:
         return jsonify(deep.settings_put(d.get("ns", "global"), d.get("key"), d.get("value")))
     except ValueError as e:
@@ -565,7 +586,7 @@ def deep_settings_put():
 
 @app.route("/api/deep/settings/delete", methods=["POST"])
 def deep_settings_delete():
-    d = request.get_json() or {}
+    d = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     try:
         return jsonify(deep.settings_delete(d.get("ns", "global"), d.get("key")))
     except ValueError as e:
@@ -580,7 +601,7 @@ def deep_perms_show():
 
 @app.route("/api/deep/perms/set", methods=["POST"])
 def deep_perms_set():
-    d = request.get_json() or {}
+    d = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     try:
         return jsonify(deep.perm_set(d.get("package"), d.get("permission"),
                                      bool(d.get("grant"))))
@@ -596,7 +617,7 @@ def deep_appops_get():
 
 @app.route("/api/deep/appops/set", methods=["POST"])
 def deep_appops_set():
-    d = request.get_json() or {}
+    d = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     try:
         return jsonify(deep.appops_set(d.get("package"), d.get("op"), d.get("mode")))
     except ValueError as e:
@@ -612,7 +633,7 @@ def deep_display_info():
 
 @app.route("/api/deep/display/set", methods=["POST"])
 def deep_display_set():
-    d = request.get_json() or {}
+    d = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     try:
         return jsonify(deep.display_set(d.get("kind"), d.get("value")))
     except ValueError as e:
@@ -625,7 +646,7 @@ def deep_display_reset():
 @app.route("/api/deep/usage")
 def deep_usage():
     try:
-        return jsonify(deep.usage_timeline(min(int(request.args.get("lines", 200)), 800)))
+        return jsonify(deep.usage_timeline(min(_to_int(request.args.get("lines", 200), 200), 800)))
     except ValueError:
         return jsonify(deep.usage_timeline(200))
 
@@ -637,7 +658,7 @@ def deep_services():
 def deep_dumpsys():
     try:
         return jsonify(deep.dumpsys_service(request.args.get("service", ""),
-                                            int(request.args.get("lines", 150))))
+                                            _to_int(request.args.get("lines", 150), 150)))  # fix: guarded cast
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
@@ -648,7 +669,7 @@ def deep_props():
 # ==================== TERMINAL SHELL API ====================
 @app.route("/api/terminal/exec", methods=["POST"])
 def terminal_exec():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
     cmd = (data.get("command") or "").strip()
     if not cmd:
         return jsonify({"output": "", "error": "Empty command"})
@@ -656,7 +677,11 @@ def terminal_exec():
     if cmd.startswith("adb "):
         # BUG FIX: raw .split() destroyed quoted args ("pull /sdcard/My File.txt");
         # shlex.split preserves them exactly as the operator typed them.
-        args = shlex.split(cmd[4:])
+        # fix: unbalanced quotes raise ValueError — clean 400, not a 500.
+        try:
+            args = shlex.split(cmd[4:])
+        except ValueError:
+            return jsonify({"success": False, "error": "Malformed command"}), 400
         res = adb.run_cmd(args, timeout=30)
     else:
         res = adb.shell(cmd, timeout=30)
@@ -721,6 +746,9 @@ def cve_scan():
                         "error": "ip/port invalides"}), 400
     key_type = data.get("key_type") or None
     cmd_to_run = data.get("cmd") or None
+    # fix: whitelist key_type — only the cert builder's known enums pass.
+    if key_type is not None and key_type not in ("ec", "ed25519"):
+        return jsonify({"success": False, "error": "key_type invalide (ec|ed25519)"}), 400
 
     # Build attempt matrix
     if key_type:
@@ -785,8 +813,8 @@ def wifi_recon():
 def subnet_scan_api():
     """Scan entire local subnet for Android devices with ADB / Wireless debugging."""
     import re as _re
-    data = request.get_json() or {}
-    subnet = data.get("subnet", "").strip()
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    subnet = (data.get("subnet") or "").strip()  # fix: None-safe strip
     if not subnet:
         local_ip = get_local_ip()
         subnet = get_subnet_prefix(local_ip)
@@ -824,8 +852,8 @@ def screen_stream():
 @app.route("/api/exploit/mic-record", methods=["POST"])
 @app.route("/api/audio/record", methods=["POST"])
 def mic_record():
-    data = request.get_json(silent=True) or {}
-    duration = min(int(data.get("duration", 10)), 60)
+    data = request.get_json(silent=True) or {}  # fix: silent parse
+    duration = min(_to_int(data.get("duration", 10), 10, lo=1, hi=60), 60)
     result = record_audio(duration)
     if result.get("success") and result.get("filepath"):
         if request.args.get("download") == "1":
@@ -842,7 +870,11 @@ def mic_record():
 @app.route("/api/camera/snap", methods=["POST"])
 def camera_cap():
     data = request.get_json(silent=True) or {}
-    cam_id = int(data.get("camera_id", 0))
+    raw_cam = data.get("camera_id", 0)
+    # fix: None means "no camera chosen" — don't coerce it to 0 (back cam).
+    if raw_cam is None:
+        return jsonify({"success": False, "error": "camera_id requis"}), 400
+    cam_id = _to_int(raw_cam, 0, lo=0, hi=9)
     result = capture_camera(cam_id)
     if result.get("success") and result.get("filepath"):
         if request.args.get("download") == "1":
@@ -868,8 +900,8 @@ def notifications():
 # --- Module 6: Keylogger/Events ---
 @app.route("/api/exploit/capture-events", methods=["POST"])
 def events_capture():
-    data = request.get_json() or {}
-    duration = min(int(data.get("duration", 5)), 30)
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    duration = min(_to_int(data.get("duration", 5), 5, lo=1, hi=30), 30)
     return jsonify(capture_events(duration))
 
 # --- Module 7: Browser History ---
@@ -885,9 +917,9 @@ def clipboard_read():
 # --- Module 9: SMS Sender ---
 @app.route("/api/exploit/send-sms", methods=["POST"])
 def sms_send():
-    data = request.get_json() or {}
-    phone = data.get("phone", "").strip()
-    message = data.get("message", "").strip()
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    phone = (data.get("phone") or "").strip()  # fix: None-safe strip
+    message = (data.get("message") or "").strip()  # fix: None-safe strip
     if not phone or not message:
         return jsonify({"success": False, "error": "Numéro et message requis"}), 400
     return jsonify(send_sms(phone, message))
@@ -895,8 +927,8 @@ def sms_send():
 # --- Module 10: Call Initiator ---
 @app.route("/api/exploit/make-call", methods=["POST"])
 def call_make():
-    data = request.get_json() or {}
-    phone = data.get("phone", "").strip()
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    phone = (data.get("phone") or "").strip()  # fix: None-safe strip
     if not phone:
         return jsonify({"success": False, "error": "Numéro requis"}), 400
     return jsonify(make_call(phone))
@@ -908,8 +940,8 @@ def call_end():
 # --- Module 11: App Data Exfiltration ---
 @app.route("/api/exploit/extract-app-data", methods=["POST"])
 def app_exfil():
-    data = request.get_json() or {}
-    pkg = data.get("package", "").strip()
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    pkg = (data.get("package") or "").strip()  # fix: None-safe strip
     if not pkg:
         return jsonify({"success": False, "error": "Package name requis"}), 400
     return jsonify(extract_app_data(pkg))
@@ -921,17 +953,17 @@ def persistence_enable():
 
 @app.route("/api/exploit/connect-wifi", methods=["POST"])
 def wifi_connect():
-    data = request.get_json() or {}
-    ip = data.get("ip", "").strip()
-    port = int(data.get("port", 5555))
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    ip = (data.get("ip") or "").strip()  # fix: None-safe strip
+    port = _to_int(data.get("port", 5555), 5555, lo=1, hi=65535)
     if not ip:
         return jsonify({"success": False, "error": "IP requis"}), 400
     return jsonify(connect_wifi_adb(ip, port))
 
 @app.route("/api/exploit/disconnect-wifi", methods=["POST"])
 def wifi_disconnect():
-    data = request.get_json() or {}
-    ip = data.get("ip", "").strip() or None
+    data = request.get_json(silent=True) or {}  # fix: silent parse — malformed JSON can't 415/400 HTML
+    ip = (data.get("ip") or "").strip() or None  # fix: None-safe strip
     return jsonify(disconnect_wifi_adb(ip))
 
 @app.route("/api/exploit/persistence-status")
@@ -958,8 +990,12 @@ def list_loot_artifacts():
                 elif ext in (".txt", ".log", ".json", ".md"):
                     art_type = "data"
 
-                stat = p.stat()
-                sz = stat.st_size
+                # fix: stat race — open under EAFP, not exists-then-stat.
+                try:
+                    stat = p.stat()
+                    sz = stat.st_size
+                except FileNotFoundError:
+                    continue
                 if sz < 1024:
                     sz_str = f"{sz} B"
                 elif sz < 1024 * 1024:
@@ -975,7 +1011,8 @@ def list_loot_artifacts():
                     "size_human": sz_str,
                     "mtime": stat.st_mtime,
                     "source": "temp",
-                    "url": f"/api/loot/file?name={p.name}&dir=temp"
+                    # fix: name URL-quoted — spaces/metachars can't break the URL.
+                    "url": f"/api/loot/file?name={quote(p.name)}&dir=temp"
                 })
 
     # 2. Scan cortex_shots directory
@@ -984,8 +1021,12 @@ def list_loot_artifacts():
         for p in shots_dir.glob("*"):
             if p.is_file() and not p.name.startswith("."):
                 name = p.name
-                stat = p.stat()
-                sz = stat.st_size
+                # fix: stat race — open under EAFP, not exists-then-stat.
+                try:
+                    stat = p.stat()
+                    sz = stat.st_size
+                except FileNotFoundError:
+                    continue
                 sz_str = f"{sz / 1024:.1f} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.1f} MB"
                 artifacts.append({
                     "id": p.stem,
@@ -995,7 +1036,8 @@ def list_loot_artifacts():
                     "size_human": sz_str,
                     "mtime": stat.st_mtime,
                     "source": "cortex",
-                    "url": f"/api/loot/file?name={p.name}&dir=cortex"
+                    # fix: name URL-quoted — spaces/metachars can't break the URL.
+                    "url": f"/api/loot/file?name={quote(p.name)}&dir=cortex"
                 })
 
     artifacts.sort(key=lambda x: x["mtime"], reverse=True)
@@ -1012,11 +1054,18 @@ def download_loot_file():
 
     target_dir = (BASE_DIR / "cortex_shots") if folder == "cortex" else TEMP_DIR
     p = target_dir / name
-    if not p.exists() or not p.is_file():
+    # fix: realpath containment — drive-relative/absolute values
+    # ('C:/Windows/...', 'D:x') must not escape the loot dir.
+    real_p = os.path.realpath(str(p))
+    real_dir = os.path.realpath(str(target_dir))
+    if not real_p.startswith(real_dir + os.sep):
+        return jsonify({"error": "Invalid filename"}), 404
+    # fix: TOCTOU — open under EAFP instead of exists-then-send.
+    try:
+        as_dl = request.args.get("dl") == "1"
+        return send_file(real_p, as_attachment=as_dl, download_name=name)
+    except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
-
-    as_dl = request.args.get("dl") == "1"
-    return send_file(str(p), as_attachment=as_dl, download_name=name)
 
 if __name__ == "__main__":
     print(f"[*] DroidCommand v3.0 console: http://{HOST}:{PORT}")

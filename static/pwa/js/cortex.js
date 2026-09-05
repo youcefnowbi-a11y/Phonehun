@@ -3,7 +3,7 @@
 // ============================================================
 
 window.Cortex = (function () {
-  let lastMessageCount = -1;
+  let lastChatSig = '';  // fix: content signature — count collisions after /chat/clear miss updates
 
   async function sendMessage() {
     const input = document.getElementById('vesperChatInput');
@@ -22,7 +22,7 @@ window.Cortex = (function () {
 
       if (res.success) {
         pushFlow('BRAIN', 'Vesper received transmission.');
-        setTimeout(pollChat, 800);
+        // fix: the heartbeat picks the reply up at 1s cadence — no one-shot race poll
       } else {
         appendBubble('vesper', `*Connection snag: ${res.error || res.message || 'Unknown error'}*`);
       }
@@ -34,13 +34,19 @@ window.Cortex = (function () {
   async function pollChat() {
     try {
       const res = await api('/api/brain/chat');
-      if (!res.success || !res.messages) return;
+      if (!res.success || !res.messages) return false;
 
-      if (res.messages.length !== lastMessageCount) {
-        lastMessageCount = res.messages.length;
+      const last = res.messages[res.messages.length - 1];
+      const sig = `${res.messages.length}:${last ? String(last.content).slice(0, 80) : ''}`;
+      if (sig !== lastChatSig) {
+        lastChatSig = sig;
         renderMessages(res.messages);
+        return true;
       }
-    } catch (e) {}
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 
   function renderMessages(messages) {
@@ -100,7 +106,7 @@ window.Cortex = (function () {
       if (res.success) {
         pushFlow('HIT', 'Mission armed. Vesper taking control.');
       } else {
-        pushFlow('ALERT', `Mission failed to arm: ${res.error || res.message}`);
+        pushFlow('ALERT', `Mission failed to arm: ${res.error || res.message || 'Unknown error'}`);
       }
     } catch (e) {
       pushFlow('ALERT', `Mission error: ${e.message}`);
@@ -116,9 +122,8 @@ window.Cortex = (function () {
       return;
     }
     const cadence = Date.now() < chatBusyUntil ? 1000 : 6000;
-    const before = lastMessageCount;
-    await pollChat();
-    if (lastMessageCount !== before) chatBusyUntil = 0; // reply landed, rest
+    const changed = await pollChat();
+    if (changed) chatBusyUntil = 0; // reply landed, rest
     setTimeout(chatHeartbeat, cadence);
   })();
   setTimeout(pollChat, 1000);

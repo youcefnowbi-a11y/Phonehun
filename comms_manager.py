@@ -71,12 +71,14 @@ class CommsManager:
     def get_contacts(self):
         # Android 12's `content` rejects comma-joined projections and keeps only
         # the last repeated flag — so query full rows and pick fields client-side.
-        cmd = "content query --uri content://contacts/phones/ | head -n 250"
+        # fix: no `| head` pipe — it masked device-side failures (pipeline exit =
+        # head's 0); rows are sliced in Python instead (item 19)
+        cmd = "content query --uri content://contacts/phones/"
         res = self.adb.shell(cmd, timeout=15)
-        
+
         contacts = []
         if res["success"]:
-            rows = self.parse_content_rows(res["stdout"])
+            rows = self.parse_content_rows((res.get("stdout") or ""))[:250]  # fix: python slice (item 19)
             for r in rows:
                 name = r.get("display_name", "Unknown")
                 num = r.get("number", "Unknown")
@@ -87,15 +89,18 @@ class CommsManager:
                         "type": r.get("type", "Mobile")
                     })
 
-        return {"contacts": contacts, "count": len(contacts)}
+        # fix: error surfaced on device-side failure (item 19)
+        return {"contacts": contacts, "count": len(contacts),
+                "error": None if res["success"] else res.get("stderr")}
 
     def get_sms(self):
-        cmd = "content query --uri content://sms/ --projection _id,address,body,date,type --sort 'date DESC' | head -n 200"
+        # fix: no `| head` pipe — it masked device-side failures; python slice instead (item 19)
+        cmd = "content query --uri content://sms/ --projection _id,address,body,date,type --sort 'date DESC'"
         res = self.adb.shell(cmd, timeout=15)
-        
+
         messages = []
         if res["success"]:
-            rows = self.parse_content_rows(res["stdout"])
+            rows = self.parse_content_rows((res.get("stdout") or ""))[:200]  # fix: python slice (item 19)
             for r in rows:
                 date_ms = r.get("date")
                 date_str = "Unknown"
@@ -105,7 +110,10 @@ class CommsManager:
                     except Exception:
                         pass
 
-                msg_type = "Received" if r.get("type") == "1" else ("Sent" if r.get("type") == "2" else "Draft")
+                # fix: full SMS type map — Draft/Outbox/Failed/Queued were collapsed (item 20)
+                sms_type_map = {"1": "Received", "2": "Sent", "3": "Draft",
+                                "4": "Outbox", "5": "Failed", "6": "Queued"}
+                msg_type = sms_type_map.get(r.get("type"), "Unknown")
                 messages.append({
                     "id": r.get("_id", ""),
                     "address": r.get("address", "Unknown"),
@@ -114,16 +122,19 @@ class CommsManager:
                     "type": msg_type
                 })
 
-        return {"messages": messages, "count": len(messages)}
+        # fix: error surfaced on device-side failure (item 19)
+        return {"messages": messages, "count": len(messages),
+                "error": None if res["success"] else res.get("stderr")}
 
     def get_call_logs(self):
         # Provider returns newest-first natively; no --sort needed.
-        cmd = "content query --uri content://call_log/calls | head -n 150"
+        # fix: no `| head` pipe — it masked device-side failures; python slice instead (item 19)
+        cmd = "content query --uri content://call_log/calls"
         res = self.adb.shell(cmd, timeout=15)
-        
+
         calls = []
         if res["success"]:
-            rows = self.parse_content_rows(res["stdout"])
+            rows = self.parse_content_rows((res.get("stdout") or ""))[:150]  # fix: python slice (item 19)
             type_map = {"1": "Incoming", "2": "Outgoing", "3": "Missed", "4": "Voicemail", "5": "Rejected", "6": "Blocked"}
             for r in rows:
                 date_ms = r.get("date")
@@ -143,4 +154,6 @@ class CommsManager:
                     "type": call_type
                 })
 
-        return {"calls": calls, "count": len(calls)}
+        # fix: error surfaced on device-side failure (item 19)
+        return {"calls": calls, "count": len(calls),
+                "error": None if res["success"] else res.get("stderr")}

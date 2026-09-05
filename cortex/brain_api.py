@@ -21,7 +21,11 @@ brain_bp = Blueprint("brain", __name__, url_prefix="/api/brain")
 
 @brain_bp.route("/config", methods=["GET"])
 def brain_config_get():
-    cfg = brain_core.load_config()
+    # fix: missing/unreadable memory file -> serve empty defaults, not a 500.
+    try:
+        cfg = brain_core.load_config()
+    except OSError:
+        cfg = {}
     key = cfg.get("api_key") or ""
     return jsonify({
         "success": True,
@@ -39,7 +43,13 @@ def brain_config_get():
 @brain_bp.route("/config", methods=["POST"])
 def brain_config_post():
     data = request.get_json(silent=True) or {}
-    cfg = brain_core.save_config(data)
+    # fix: reject non-dict bodies — save_config expects a mapping.
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "JSON object required"}), 400
+    try:
+        cfg = brain_core.save_config(data)
+    except Exception as e:  # fix: write failures -> clean 400, not a 500
+        return jsonify({"success": False, "error": f"Config save failed: {e}"}), 400
     key = cfg.get("api_key") or ""
     return jsonify({"success": True, "provider": cfg.get("provider"),
                     "model": cfg.get("model"), "base_url": cfg.get("base_url"),
@@ -115,7 +125,11 @@ def brain_memory():
         # Defense-in-depth: allowlisted section must resolve inside mem_dir.
         if p.parent != mem_dir.resolve():
             return jsonify({"success": False, "error": "Invalid memory section"}), 404
-        content = p.read_text(encoding="utf-8", errors="replace") if p.exists() else f"# {section.upper()}\nNo {section} entries recorded yet."
+        # fix: missing dir/file or read failure -> serve empty default, not 500.
+        try:
+            content = p.read_text(encoding="utf-8", errors="replace") if p.exists() else f"# {section.upper()}\nNo {section} entries recorded yet."
+        except OSError:
+            content = f"# {section.upper()}\nNo {section} entries recorded yet."
         return jsonify({"success": True, "section": section, "content": content})
     elif section == "skills":
         skills_text = ["# CRYSTALLIZED SKILLS (Python Tools)"]
@@ -123,9 +137,13 @@ def brain_memory():
             for f in sorted(skills_dir.glob("*.py")):
                 if f.name.startswith("__"):
                     continue
-                with open(f, "r", encoding="utf-8", errors="replace") as fh:
-                    # Cap the preview read at 4 KB — don't slurp huge skill files.
-                    first_lines = "\n".join(fh.read(4096).splitlines()[:6])
+                # fix: unreadable/ vanished skill file -> skip it, not a 500.
+                try:
+                    with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                        # Cap the preview read at 4 KB — don't slurp huge skill files.
+                        first_lines = "\n".join(fh.read(4096).splitlines()[:6])
+                except OSError:
+                    continue
                 skills_text.append(f"### {f.stem}\n```python\n{first_lines}\n```")
         content = "\n\n".join(skills_text) if len(skills_text) > 1 else "No custom skills compiled yet."
         return jsonify({"success": True, "section": section, "content": content})

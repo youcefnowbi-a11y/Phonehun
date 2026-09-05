@@ -61,6 +61,7 @@ let CURRENT_MODE = 'ai';
 
 function setPrimaryMode(mode) {
   CURRENT_MODE = mode;
+  saveUiState();
   const btnAi = document.getElementById('btnModeAi');
   const btnPhone = document.getElementById('btnModePhone');
   const btnManual = document.getElementById('btnModeManual');
@@ -76,6 +77,9 @@ function setPrimaryMode(mode) {
   if (viewPhone) viewPhone.style.display = (mode === 'phone') ? 'block' : 'none';
   if (viewManual) viewManual.style.display = (mode === 'manual') ? 'block' : 'none';
 
+  // fix: stop the glass frame pump whenever its stage leaves — no invisible streaming
+  if (mode !== 'ai' && window.Glass && window.Glass.onHide) window.Glass.onHide();
+
   if (mode === 'ai') {
     if (window.Glass) window.Glass.onShow();
     if (window.VesperCockpit) window.VesperCockpit.pollStatus();
@@ -89,6 +93,7 @@ function setPrimaryMode(mode) {
 // ============================================================
 function switchView(viewName) {
   STATE.activeView = viewName;
+  saveUiState();
 
   // Update tabs
   document.querySelectorAll('.nav-tab').forEach((tab) => {
@@ -108,6 +113,10 @@ function switchView(viewName) {
     }
   });
 
+  // fix: leaving the cockpit stops the glass frame pump
+  if (viewName !== 'cockpit' && window.Glass && window.Glass.onHide) {
+    window.Glass.onHide();
+  }
   if (viewName === 'cockpit' && window.Glass) {
     window.Glass.onShow();
   }
@@ -115,7 +124,9 @@ function switchView(viewName) {
     window.Skeleton.loadPosture();
   }
   if (viewName === 'forensics' && window.Forensics) {
-    window.Forensics.switchTab('sms');
+    // fix: restore the operator's last forensic tab instead of forcing 'sms'
+    if (window.Forensics.onShow) window.Forensics.onShow();
+    else window.Forensics.switchTab('sms');
   }
 }
 
@@ -133,12 +144,24 @@ async function toggleMasterArm() {
 
     if (res.success !== false) {
       STATE.isArmed = targetState;
+      saveUiState();
       updateArmStateUi();
       pushFlow(targetState ? 'SYS' : 'INFO', targetState ? 'HUNTER ARMED — automatic dialog strikes live' : 'HUNTER STOOD DOWN');
     }
   } catch (e) {
     pushFlow('ALERT', `Arm toggle error: ${e.message}`);
   }
+}
+
+// Hunter truth lives server-side — refresh must not lie about it (v21 fix).
+// isArmed reflects the ACTUAL watcher state, never a JS guess.
+async function syncHunterTruth() {
+  try {
+    const r = await api('/api/ghost/hunter/status');
+    STATE.isArmed = !!(r && (r.armed ?? r.running ?? r.active));
+    saveUiState();
+    updateArmStateUi();
+  } catch (e) { /* endpoint down — keep current posture */ }
 }
 
 function updateArmStateUi() {
@@ -185,11 +208,71 @@ function pushFlow(tag, message) {
   }
 }
 
+// Flow stream mirror — survives refresh (the DOM alone died on F5).
+const FLOW_KEY = 'droidcommand.flow.v1';
+
+function persistFlow(tag, message, timeStr) {
+  try {
+    const log = JSON.parse(localStorage.getItem(FLOW_KEY) || '[]');
+    log.push({ t: timeStr, tag: tag, m: message });
+    localStorage.setItem(FLOW_KEY, JSON.stringify(log.slice(-250)));
+  } catch (e) { /* non-fatal */ }
+}
+
+function rehydrateFlow() {
+  const stream = document.getElementById('operationFlowStream');
+  if (!stream) return;
+  let log = [];
+  try {
+    log = JSON.parse(localStorage.getItem(FLOW_KEY) || '[]');
+  } catch (e) { log = []; }
+  if (!Array.isArray(log)) return;
+  log.slice(-250).forEach((e) => {
+    const row = document.createElement('div');
+    row.className = 'flow-row';
+    row.innerHTML = `
+      <span class="flow-time">${escapeHtml(e.t)}</span>
+      <span class="flow-tag ${escapeHtml(e.tag)}">${escapeHtml(e.tag)}</span>
+      <span class="flow-msg">${escapeHtml(e.m)}</span>
+    `;
+    stream.appendChild(row);
+  });
+  stream.scrollTop = stream.scrollHeight;
+}
+
 function escapeHtml(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ============================================================
+// UI State Persistence — the cockpit survives F5 (v21 fix)
+// Everything the user arranged lives in localStorage; server-held truth
+// (chat history, narration, hunter state) rehydrates from its API.
+// ============================================================
+const UI_KEY = 'droidcommand.ui.v1';
+
+function loadUiState() {
+  try {
+    return JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveUiState() {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify({
+      mode: CURRENT_MODE,
+      view: STATE.activeView,
+      serial: STATE.activeSerial || '',
+      armed: STATE.isArmed
+    }));
+  } catch (e) { /* storage full/blocked — cockpit still works, just forgets */ }
 }
 
 // ============================================================
@@ -206,7 +289,7 @@ async function pollDevices() {
 
     const select = document.getElementById('deviceSerialSelect');
     if (select) {
-      const current = select.value;
+      const current = select.value || loadUiState().serial || '';
       select.innerHTML = '<option value="">Default Attached Device</option>';
       devices.forEach(d => {
         const opt = document.createElement('option');
@@ -214,8 +297,10 @@ async function pollDevices() {
         opt.textContent = `${d.model || d.device || d.serial} (${d.serial})`;
         select.appendChild(opt);
       });
-      if (current) select.value = current;
-      STATE.activeSerial = select.value || (devices[0] ? devices[0].serial : null);
+      // Restore the persisted selection when it still exists; '' is a REAL
+      // choice (default device) — never silently rewrite it to serial[0].
+      select.value = devices.some(d => d.serial === current) ? current : '';
+      STATE.activeSerial = select.value || null;
     }
   } catch (e) {
     // Quiet fail on poll
@@ -232,6 +317,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // Arm Button
   const armBtn = document.getElementById('masterArmBtn');
   if (armBtn) armBtn.addEventListener('click', toggleMasterArm);
+
+  // Device selector — persist the operator's choice across refreshes
+  const serialSel = document.getElementById('deviceSerialSelect');
+  if (serialSel) serialSel.addEventListener('change', () => {
+    STATE.activeSerial = serialSel.value || null;
+    saveUiState();
+  });
+
+  // ── Rehydrate state — the cockpit survives F5 (v21 fix) ──
+  const savedUi = loadUiState();
+  rehydrateFlow();
+  if (['ai', 'phone', 'manual'].includes(savedUi.mode) && savedUi.mode !== 'ai') {
+    setPrimaryMode(savedUi.mode);
+  }
+  if (savedUi.view && savedUi.view !== 'cockpit' &&
+      [...document.querySelectorAll('.nav-tab')].some(t => t.dataset.view === savedUi.view)) {
+    switchView(savedUi.view);
+  }
+  if (serialSel && savedUi.serial) serialSel.value = savedUi.serial;
+  syncHunterTruth();
 
   // Install PWA button
   const installBtn = document.getElementById('installPwaBtn');

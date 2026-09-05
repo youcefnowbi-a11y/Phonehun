@@ -7,15 +7,33 @@
 
 window.VesperCockpit = (function () {
   let pollTimer = null;
-  let lastNarrationCount = 0;
+  // v21 fix: render gate keyed on CONTENT SIGNATURE (length + last line),
+  // not length alone — the server slides its 60-line narration window
+  // (del narr[:-60]), so length can hold steady while content moves.
+  // The old length-only gate froze the console at exactly 60 lines forever.
+  let lastNarrationSig = '';
   let isRunning = false;
+  let wasRunning = false;   // running→idle transition detector (chat refresh)
+  let awaitingReply = false; // chat POST sent — refresh stream when she answers
+  // v21 fix (injection): approved-plan objectives are AI/device-influenced text;
+  // they live here, and EXECUTE buttons reference them by index only.
+  const planRegistry = [];
 
   // Initialize
   function init() {
     loadChat();
     pollStatus();
-    switchMemoryTab('casefile');
-    pollTimer = setInterval(pollStatus, 1500);
+    // v21 fix: the operator's last console/memory subtabs survive F5
+    let memTab = 'casefile', conTab = 'feed';
+    try {
+      memTab = localStorage.getItem('vc.memtab') || 'casefile';
+      conTab = localStorage.getItem('vc.contab') || 'feed';
+    } catch (e) {}
+    switchMemoryTab(['casefile', 'lessons', 'identity', 'skills'].includes(memTab) ? memTab : 'casefile');
+    switchConsoleTab(['feed', 'memory', 'tools'].includes(conTab) ? conTab : 'feed');
+    // v21 fix: no private 1.5s interval — app.js brainHeartbeat already owns
+    // the status cadence (1.2s busy / 4s idle) and calls pollStatus(); two
+    // pollers were double-fetching /api/brain/status every tick.
   }
 
   // 1. Poll Vesper Brain Status
@@ -33,6 +51,13 @@ window.VesperCockpit = (function () {
 
     const state = status.state || 'idle';
     isRunning = (state === 'running');
+    // v21: when a chat turn completes (running→idle), refresh the stream —
+    // the old one-shot setTimeout(loadChat, 800) raced her thinking time.
+    if (wasRunning && !isRunning && awaitingReply) {
+      awaitingReply = false;
+      loadChat();
+    }
+    wasRunning = isRunning;
 
     // Dynamic Animation: When mission is running, chat gets smaller, console expands!
     const cockpitGrid = document.getElementById('mode-ai-cockpit');
@@ -53,10 +78,14 @@ window.VesperCockpit = (function () {
     }
 
     // Step Progress in Console Header
+    // v21: max_steps comes from the brain's own config (task mode), not a
+    // hardcoded 40 — the old bar lied once the operator raises the cap.
     const stepEl = document.getElementById('vesperStepDisplay');
     const stepBar = document.getElementById('vesperStepProgressBar');
     const stepNum = status.step || 0;
-    const maxSteps = 40;
+    const maxSteps = (status.mode === 'chat')
+      ? (status.max_chat_steps || 20)
+      : (status.max_steps || 40);
     if (stepEl) {
       stepEl.textContent = isRunning ? `STEP ${stepNum} / ${maxSteps}` : 'IDLE';
     }
@@ -68,8 +97,12 @@ window.VesperCockpit = (function () {
     // Live Narration Feed & Codex Collapsible Tool Cards
     const narrationBox = document.getElementById('vesperNarrationFeed');
     const narrations = status.narration || [];
-    if (narrationBox && narrations.length > 0) {
-      if (narrations.length !== lastNarrationCount) {
+    if (narrationBox) {
+      // v21: content-signature render gate — server slides a 60-line window,
+      // so length alone lies; length + tail line catches every slide.
+      const sig = narrations.length + '|' + (narrations[narrations.length - 1] || '');
+      if (narrations.length > 0 && sig !== lastNarrationSig) {
+        lastNarrationSig = sig;
         narrationBox.innerHTML = '';
         narrations.forEach((line) => {
           // Detect tool calls or gestures to visually animate on Glass
@@ -117,7 +150,6 @@ window.VesperCockpit = (function () {
           }
         });
         narrationBox.scrollTop = narrationBox.scrollHeight;
-        lastNarrationCount = narrations.length;
       }
     } else if (narrationBox && narrations.length === 0 && !isRunning) {
       narrationBox.innerHTML = '<div style="color: var(--text-graphite); padding: 16px; font-size: 11.5px;">Console ready. Chat with Vesper or pick a mission starter to formulate an assault plan.</div>';
@@ -225,21 +257,36 @@ window.VesperCockpit = (function () {
         msgs.forEach(m => {
           const b = document.createElement('div');
           b.className = `chat-bubble ${m.role === 'user' ? 'user' : 'vesper'}`;
-          let contentHtml = escapeHtml(m.content);
+          // v21 fix: \n → <br> so plans render as plans, not collapsed walls
+          let contentHtml = escapeHtml(m.content).replace(/\n/g, '<br>');
 
-          // If Vesper suggests a plan or action, render an Approve & Launch Plan button!
-          if (m.role === 'assistant' && (m.content.toLowerCase().includes('plan') || m.content.toLowerCase().includes('step') || m.content.toLowerCase().includes('ready to') || m.content.toLowerCase().includes('objective'))) {
+          // v21 fix (re-inverted): the EXECUTE button belongs on messages that
+          // DO carry a newline-numbered plan — the old condition excluded real
+          // plans and stamped buttons on prose that merely mentioned "1.".
+          const isPlanMsg = m.role === 'assistant' &&
+            /\n\s*\d+[.)]/.test(m.content) && m.content.length >= 60;
+          if (isPlanMsg) {
+            // v21 fix (injection): the old JSON.stringify + &quot; attribute
+            // trick double-decoded — a literal "&quot;" inside a plan broke
+            // out of the JS string at attribute-parse time. The objective now
+            // lives in the registry; the button carries an integer ref only.
+            planRegistry.push(m.content.slice(0, 400));
+            if (planRegistry.length > 100) planRegistry.splice(0, planRegistry.length - 100);
+            const ref = planRegistry.length - 1;
             contentHtml += `
               <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--hairline);">
                 <button class="action-pill install-pwa" style="padding: 4px 14px; font-size: 11px; font-weight: 700;"
-                  onclick="VesperCockpit.launchApprovedPlan('${escapeHtml(m.content.slice(0, 140)).replace(/'/g, "\\'")}')">
-                  EXECUTE APPROVED PLAN
-                </button>
-              </div>
-            `;
+                  data-plan-ref="${ref}">EXECUTE APPROVED PLAN</button>
+              </div>`;
           }
 
-          b.innerHTML = `<strong>${m.role === 'user' ? 'Operator' : (data.persona || 'Vesper')}:</strong> ${contentHtml}`;
+          b.innerHTML = `<strong>${m.role === 'user' ? 'Operator' : escapeHtml(data.persona || 'Vesper')}:</strong> ${contentHtml}`;
+          const planBtn = b.querySelector('button[data-plan-ref]');
+          if (planBtn) {
+            planBtn.addEventListener('click', () => {
+              launchApprovedPlan(planRegistry[parseInt(planBtn.dataset.planRef, 10)]);
+            });
+          }
           stream.appendChild(b);
         });
       }
@@ -303,6 +350,7 @@ window.VesperCockpit = (function () {
         }
 
         // Standard conversation
+        awaitingReply = true;  // v21: refresh on the running→idle edge, 800ms as fallback
         await api('/api/brain/chat', {
           method: 'POST',
           body: JSON.stringify({ message: text })
@@ -369,6 +417,7 @@ window.VesperCockpit = (function () {
 
   // 6. Console Subtab Switcher
   function switchConsoleTab(tabName) {
+    try { localStorage.setItem('vc.contab', tabName); } catch (e) {}
     document.querySelectorAll('.console-tab-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === tabName);
     });
@@ -386,6 +435,7 @@ window.VesperCockpit = (function () {
 
   // 7. Memory Tab Switcher
   async function switchMemoryTab(tabName) {
+    try { localStorage.setItem('vc.memtab', tabName); } catch (e) {}
     document.querySelectorAll('.memory-subtab-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === tabName);
     });
@@ -414,14 +464,14 @@ window.VesperCockpit = (function () {
       <div style="font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--text-body); padding: 8px;">
         <div style="font-weight: 700; color: var(--ember); margin-bottom: 8px;">BATTLE-PROVEN TOOLS (48-TOOL BELT):</div>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-          <div class="stat-badge"><code>screen_capture</code> (100%)</div>
-          <div class="stat-badge"><code>screen_tap</code> (100%)</div>
-          <div class="stat-badge"><code>screen_text</code> (95%)</div>
-          <div class="stat-badge"><code>read_sms</code> (100%)</div>
-          <div class="stat-badge"><code>read_calls</code> (100%)</div>
-          <div class="stat-badge"><code>shell</code> (Root 100%)</div>
-          <div class="stat-badge"><code>dumpsys</code> (100%)</div>
-          <div class="stat-badge"><code>network_sweep</code> (98%)</div>
+          <div class="stat-badge"><code>screen_capture</code> · READY</div>
+          <div class="stat-badge"><code>screen_tap</code> · READY</div>
+          <div class="stat-badge"><code>screen_text</code> · READY</div>
+          <div class="stat-badge"><code>read_sms</code> · READY</div>
+          <div class="stat-badge"><code>read_calls</code> · READY</div>
+          <div class="stat-badge"><code>shell</code> · ROOT</div>
+          <div class="stat-badge"><code>dumpsys</code> · READY</div>
+          <div class="stat-badge"><code>network_sweep</code> · READY</div>
         </div>
       </div>
     `;

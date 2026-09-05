@@ -2,8 +2,7 @@ import shlex
 import re
 import uuid
 from pathlib import Path
-from flask import request
-from config import TEMP_DIR
+from config import TEMP_DIR  # fix: flask request import removed — manager reads no request data (item 27)
 
 class ToolkitManager:
     """
@@ -77,8 +76,9 @@ class ToolkitManager:
         if not pin_clean:
             return {"success": False, "error": "Code PIN invalide"}
 
-        # Wakeup & swipe up to show keypad
-        self.adb.shell("input keyevent 224; sleep 0.2; input swipe 360 1200 360 300 200; sleep 0.3")
+        # fix: `input keyevent 82` wakes/dismisses the keyguard without hard-coded
+        # 360x1200 screen coordinates (cf. pin_siege.py:130-135 wake) (item 26)
+        self.adb.shell("input keyevent 224; sleep 0.2; input keyevent 82; sleep 0.3")
         # Type the pin and enter
         res = self.adb.shell(f"input text {pin_clean}; input keyevent 66")
         return {"success": res["success"], "pin_attempted": pin_clean}
@@ -103,17 +103,17 @@ class ToolkitManager:
         return {"operations": results, "note": "Nécessite les permissions root pour modifier /data/system"}
 
     # ==================== 2. FORENSIC & SYSTEM EXTRACTION ====================
-    def dump_wifi_passwords(self):
+    def dump_wifi_passwords(self, reveal=False):
         """
         Extract saved Wi-Fi networks and plain WPA/WPA2 pre-shared keys
         """
+        # fix: reveal is now an optional parameter — the manager no longer reads
+        # flask request.args; routing stays with the parent app (item 27)
         paths = [
             "/data/misc/wifi/WifiConfigStore.xml",
             "/data/misc/wifi/wpa_supplicant.conf",
             "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
         ]
-        reveal = request.args.get("reveal") == "1"
-
         def _mask(psk):
             # Open-network placeholders stay as-is; real PSKs are masked by
             # default (last 2 chars) unless ?reveal=1.
@@ -133,9 +133,11 @@ class ToolkitManager:
                     s_m = re.search(r'<string name="SSID">"?(.*?)"?</string>', block)
                     if not s_m:
                         continue
+                    # fix: unescape \" in SSIDs stored by WifiConfigStore (item 23)
+                    ssid_val = s_m.group(1).replace('\\"', '"')
                     p_m = re.search(r'<string name="PreSharedKey">"?(.*?)"?</string>', block)
                     pw, was_masked = _mask(p_m.group(1) if p_m else "(Réseau ouvert / Aucun)")
-                    found.append({"ssid": s_m.group(1), "password": pw, "psk_masked": was_masked, "source": p})
+                    found.append({"ssid": ssid_val, "password": pw, "psk_masked": was_masked, "source": p})
 
                 # WPA style
                 wpa_blocks = re.findall(r'network=\{([^}]+)\}', content)
@@ -181,7 +183,8 @@ class ToolkitManager:
         res = self.adb.shell("dumpsys clipboard")
         raw = res.get("stdout", "")
         # Try to parse clip text
-        clip_matches = re.findall(r'text=([^\r\n,]+)', raw)
+        # fix: commas are legal clip content — capture to end of line, rstrip (item 22)
+        clip_matches = [m.rstrip() for m in re.findall(r'(?m)^\s*text=(.+)$', raw)]
         return {
             "raw_dump": raw[:2000],
             "extracted_clips": clip_matches
@@ -231,19 +234,21 @@ class ToolkitManager:
         return {"bloatware": result}
 
     def disable_bloat_package(self, package_name):
-        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+", package_name):
+        # fix: hyphens are legal in package names (item 24)
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)+", package_name):
             return {"success": False, "error": "Nom de package invalide"}
         safe_pkg = shlex.quote(package_name)
         res = self.adb.shell(f"pm uninstall -k --user 0 {safe_pkg}")
-        ok = "Success" in res.get("stdout", "")
-        return {"success": ok, "stdout": res.get("stdout", ""), "error": res.get("stderr", "")}
+        ok = "Success" in (res.get("stdout") or "")  # fix: None-safe (item 21)
+        return {"success": ok, "stdout": res.get("stdout") or "", "error": res.get("stderr") or ""}
 
     def restore_bloat_package(self, package_name):
-        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+", package_name):
+        # fix: hyphens are legal in package names (item 24)
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)+", package_name):
             return {"success": False, "error": "Nom de package invalide"}
         safe_pkg = shlex.quote(package_name)
         res = self.adb.shell(f"cmd package install-existing {safe_pkg}")
-        ok = "Installed" in res.get("stdout", "") or res.get("success", False)
+        ok = "installed" in (res.get("stdout") or "").lower() or res.get("success", False)  # fix: case-insensitive (item 21)
         return {"success": ok, "stdout": res.get("stdout", "")}
 
     # ==================== 4. HARDWARE & LIVE DIAGNOSTICS ====================
@@ -251,9 +256,10 @@ class ToolkitManager:
         """
         Fetch sensors, cameras, and audio volume channels
         """
-        sensors_res = self.adb.shell("dumpsys sensorservice | grep -E 'Handle|Name|Vendor|Type'")
-        cam_res = self.adb.shell("dumpsys media.camera | grep -E 'Camera ID|Facing|Resource|Device'")
-        audio_res = self.adb.shell("dumpsys audio | grep -E 'STREAM_|Volume'")
+        # fix: each 30s-timeout grep dropped to timeout=10 (item 25)
+        sensors_res = self.adb.shell("dumpsys sensorservice | grep -E 'Handle|Name|Vendor|Type'", timeout=10)
+        cam_res = self.adb.shell("dumpsys media.camera | grep -E 'Camera ID|Facing|Resource|Device'", timeout=10)
+        audio_res = self.adb.shell("dumpsys audio | grep -E 'STREAM_|Volume'", timeout=10)
 
         return {
             "sensors": sensors_res.get("stdout", "").strip(),

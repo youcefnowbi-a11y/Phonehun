@@ -9,13 +9,20 @@ window.PhoneIntelligence = (function () {
   let cachedApps = [];
   let realtimeLootItems = [];
 
-  // Initialize
+  // Initialize — restore the operator's last deck position across refreshes
   function init() {
-    loadLoot();
+    try {
+      const savedTab = localStorage.getItem('pi.subtab');
+      const savedPath = localStorage.getItem('pi.filepath');
+      if (savedTab && ['loot', 'files', 'apps', 'comms'].includes(savedTab)) activeSubTab = savedTab;
+      if (savedPath) currentFilePath = savedPath;
+    } catch (e) { /* storage unavailable */ }
+    switchSubTab(activeSubTab);
   }
 
   function switchSubTab(tabName) {
     activeSubTab = tabName;
+    try { localStorage.setItem('pi.subtab', tabName); } catch (e) {}
     document.querySelectorAll('.phone-subnav-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
@@ -29,7 +36,12 @@ window.PhoneIntelligence = (function () {
     if (tabName === 'loot') loadLoot();
     if (tabName === 'files') loadFiles(currentFilePath);
     if (tabName === 'apps') loadApps('user');
-    if (tabName === 'comms') switchCommsSubTab('sms');
+    if (tabName === 'comms') {
+      // fix: restore the last comms vault tab instead of hardcoding 'sms'
+      let lastComms = 'sms';
+      try { lastComms = localStorage.getItem('pi.commstab') || 'sms'; } catch (e) {}
+      switchCommsSubTab(lastComms);
+    }
   }
 
   // ============================================================
@@ -128,6 +140,7 @@ window.PhoneIntelligence = (function () {
   // ============================================================
   async function loadFiles(path) {
     currentFilePath = path || '/sdcard';
+    try { localStorage.setItem('pi.filepath', currentFilePath); } catch (e) {}
     const list = document.getElementById('phoneFilesList');
     const pathEl = document.getElementById('phoneCurrentPathDisplay');
     if (pathEl) pathEl.textContent = currentFilePath;
@@ -288,6 +301,7 @@ window.PhoneIntelligence = (function () {
   let activeCommsTab = 'sms';
   function switchCommsSubTab(subtab) {
     activeCommsTab = subtab;
+    try { localStorage.setItem('pi.commstab', subtab); } catch (e) {}
     document.querySelectorAll('.phone-comms-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.comms === subtab);
     });

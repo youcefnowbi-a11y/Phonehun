@@ -9,7 +9,7 @@ LS_LINE_RE = re.compile(
     r'(\d+)\s+'                   # link count
     r'(\S+)\s+'                   # owner
     r'(\S+)\s+'                   # group
-    r'(\d+)\s+'                   # size in bytes
+    r'([\d,]+(?:,\s*\d+)?)\s+'   # fix: size — /dev device nodes carry "major, minor" (item 14)
     r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+'  # date time
     r'(.+)$'                      # name (may contain spaces, arrows for symlinks)
 )
@@ -32,7 +32,9 @@ class FileManager:
         
         items = []
         if not res["success"] and not res["stdout"]:
-            return {"path": remote_path, "items": [], "error": res["stderr"] or "Cannot access directory"}
+            # fix: shared payload shape — error payloads carry the same keys (item 13)
+            return {"path": remote_path, "parent_path": None, "items": [],
+                    "count": 0, "error": res["stderr"] or "Cannot access directory"}
 
         lines = res["stdout"].splitlines()
         for line in lines:
@@ -45,7 +47,12 @@ class FileManager:
                 continue
 
             perms = m.group(1)
-            size_bytes = int(m.group(5))
+            size_field = m.group(5)
+            # fix: device-node sizes are "major, minor", not bytes (item 14)
+            try:
+                size_bytes = 0 if "," in size_field else int(size_field)
+            except ValueError:
+                size_bytes = 0
             name_field = m.group(7)
 
             is_dir = perms.startswith("d")
@@ -88,7 +95,8 @@ class FileManager:
             "path": remote_path,
             "parent_path": parent_path,
             "items": items,
-            "count": len(items)
+            "count": len(items),
+            "error": None  # fix: shared payload shape, error None on success (item 13)
         }
 
     def pull_file(self, remote_path, local_dest=None):
@@ -140,11 +148,13 @@ class FileManager:
 
     def search(self, remote_path="/sdcard", query=""):
         if not query:
-            return {"items": []}
+            # fix: shared payload shape (item 13)
+            return {"items": [], "count": 0, "parent_path": None, "error": None}
         safe_path = shlex.quote(remote_path)
         safe_query = shlex.quote(f"*{query}*")
-        res = self.adb.shell(f"find {safe_path} -iname {safe_query} -maxdepth 5 2>/dev/null | head -n 100", timeout=30)
-        
+        # fix: -type f so results are truly files (item 12)
+        res = self.adb.shell(f"find {safe_path} -type f -iname {safe_query} -maxdepth 5 2>/dev/null | head -n 100", timeout=30)
+
         results = []
         if res["success"]:
             for line in res["stdout"].splitlines():
@@ -155,7 +165,10 @@ class FileManager:
                         "path": p,
                         "is_dir": False
                     })
-        return {"items": results, "count": len(results)}
+            # fix: shared payload shape (item 13)
+            return {"items": results, "count": len(results), "parent_path": None, "error": None}
+        # fix: honest failure instead of silent empty success (item 12)
+        return {"items": [], "count": 0, "parent_path": None, "error": res.get("stderr")}
 
     @staticmethod
     def format_size(bytes_val):

@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import uuid
 import shlex
 import hashlib
 import logging
@@ -18,6 +19,23 @@ _PREVIEW_TTL = 600
 # illégaux NTFS (`* ? " < > |` : WinError 123 / Alternate Data Stream).
 _PATH_RE = re.compile(r"[A-Za-z0-9 ._/\,\-\[\]()&#']+")
 
+
+# fix: stale preview sweep — crashed pulls used to strand preview_* files in
+# TEMP_DIR forever; anything older than 10x TTL is reaped (item 29)
+def _sweep_stale_previews():
+    cutoff = time.time() - _PREVIEW_TTL * 10
+    try:
+        for p in TEMP_DIR.glob("preview_*"):
+            try:
+                if p.is_file() and p.stat().st_mtime < cutoff:
+                    p.unlink()
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+
+_sweep_stale_previews()  # reap orphans left by previous sessions at import
 
 class MediaBrowser:
     def __init__(self, adb_engine):
@@ -110,19 +128,35 @@ class MediaBrowser:
             except OSError:
                 pass
 
+        # fix: pull → uuid temp → os.replace — a concurrent reader never sees
+        # a half-written file under the final name (item 28)
+        tmp_path = TEMP_DIR / f"{safe_name}.{uuid.uuid4().hex[:8]}.tmp"
         try:
-            pull_res = self.adb.run_cmd(["pull", remote_path, str(local_path)], timeout=60)
+            pull_res = self.adb.run_cmd(["pull", remote_path, str(tmp_path)], timeout=60)
             if not pull_res.get("success"):
                 # jamais de fichier partiel qui traîne dans TEMP_DIR
                 try:
-                    if local_path.exists():
-                        local_path.unlink()
+                    if tmp_path.exists():
+                        tmp_path.unlink()
                 except OSError:
                     pass
                 log.debug("fetch_preview pull échoué: %s", pull_res.get("stderr"))
                 return {"success": False, "error": "pull de l'aperçu échoué"}
+            try:
+                os.replace(tmp_path, local_path)
+            except OSError:
+                # Windows: a reader holding the old file open blocks replace —
+                # serve the fresh temp copy directly rather than failing
+                return {"success": True, "local_path": str(tmp_path),
+                        "filename": tmp_path.name, "cached": False}
+            _sweep_stale_previews()  # post-pull reap (item 29)
             return {"success": True, "local_path": str(local_path),
                     "filename": safe_name, "cached": False}
         except Exception as e:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                pass
             log.warning("fetch_preview a échoué: %s", e)
             return {"success": False, "error": "échec aperçu (voir logs)"}

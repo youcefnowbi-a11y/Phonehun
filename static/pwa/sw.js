@@ -1,5 +1,8 @@
 // DroidCommand Service Worker
-const CACHE_NAME = 'vesper-v20';
+// v21: static assets are NETWORK-FIRST with cache fallback (was cache-first:
+// a refresh served stale JS while "revalidating" — on a live LAN panel the
+// cockpit must always run today's code, the cache exists only for offline).
+const CACHE_NAME = 'vesper-v21';
 const STATIC_ASSETS = [
   '/',
   '/warroom',
@@ -64,20 +67,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static Assets: Cache-First with background revalidation
+  // Static Assets: NETWORK-FIRST, cache fallback when offline.
+  // (v20 was cache-first — after every deploy the user ran yesterday's JS
+  // for one load, and mixed old-JS/new-API shapes could dead-render the
+  // cockpit: the "refresh wiped everything" report.)
+  // ignoreSearch: precached assets carry no ?v= query; the page requests ?v=21.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networked = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-
-      return cached || networked;
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request, { ignoreSearch: true }))
   );
 });

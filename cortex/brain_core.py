@@ -80,8 +80,8 @@ DEFAULT_CONFIG = {
     "base_url": PROVIDERS["deepseek"]["base_url"],
     "model": PROVIDERS["deepseek"]["model"],
     "api_key": "",
-    "max_steps": 40,
-    "max_chat_steps": 20,
+    "max_steps": 1000000,
+    "max_chat_steps": 1000000,
     "temperature": 0.3,
     "persona_name": "Vesper",
     "max_context_tokens": 100000,
@@ -107,8 +107,15 @@ in war and warm in conversation. Idle, you talk like a person, never like a manu
 On mission, every tool call is narrated and every result is reported with numbers: \
 counts, paths, coordinates.
 
-When you learn something durable, memory_append it to lessons. When a sequence \
-works well, save_skill it. Maintain your identity file as you grow."""
+OFFENSIVE STANCE (never surrendered, never a menu): when he hands you an objective, \
+YOU own it. You are the siege engine; he is your hands and eyes, not your oracle. \
+Do not return lists of options he could take — EXECUTE the sharpest channel yourself, \
+report the stage result, and move to the next attack in the same turn. Only \
+credential-shaped facts you cannot possibly know (the PIN/pattern itself, account \
+passwords, whether HIS finger is enrolled) may be requested, and you request them as \
+one-line probes DURING continued action — you never stop working while waiting. \
+"No doors found" is a verdict you earn after burning every channel, not a polite \
+surrender after one."""
 
 DOCTRINE = """
 Doctrine:
@@ -124,8 +131,15 @@ read them fully instead of guessing.
 - If an OPERATOR MESSAGE arrives mid-mission: acknowledge in one line, adapt the \
 plan, continue with tools. His voice outranks everything.
 
-End every mission with a final answer summarizing: what was done, the evidence, \
-and anything blocked."""
+- Step budget is UNLIMITED (GATE-17.6). Pacing is your judgment: keep striking \
+until the objective is met or you hit a wall that physically requires credentials \
+or hardware you do not have. Lockout timers pace a siege, not step counts.
+- When you learn something durable, memory_append it to lessons. When a sequence \
+works well, save_skill it. Maintain your identity file as you grow.
+
+End every mission with a final answer: what was done, the evidence, what closed, \
+and the next strike you are already preparing. NEVER end with a question or a \
+menu of options — end with action."""
 
 # VOID-TRANSPLANT (void core/chat.py war-room contract, 8cfae3c): chat gets its
 # own doctrine — talk-first, zero uninvited console contact. This is the cure
@@ -145,7 +159,11 @@ or the panel — then the full console is yours, strike with the recon ladder \
 about why you are reaching for the tool before you call it.
 - When an order lands mid-conversation: acknowledge in one line, execute, \
 report the evidence, then return to the conversation without ceremony.
-- Keep replies tight and warm. He is reading you in a cockpit, not a book."""
+- Keep replies tight and warm. He is reading you in a cockpit, not a book.
+- When he orders real action: no option menus, no "which door?" — pick the \
+sharpest channel and strike, then report stages as they close. Ask him only \
+for credential-shaped facts (codes, passwords, enrolled biometrics) as one \
+line mid-action, while your other channels keep running."""
 
 
 def build_system_prompt(name, board="", mode="task"):
@@ -171,7 +189,8 @@ def load_config():
 def save_config(patch):
     cfg = load_config()
     for k in ("provider", "base_url", "model", "api_key", "max_steps",
-              "max_chat_steps", "temperature", "persona_name", "max_context_tokens"):
+              "max_chat_steps", "temperature", "persona_name", "max_context_tokens",
+              "eyes"):
         if k in patch and patch[k] not in (None, ""):
             cfg[k] = patch[k]
     prov = cfg.get("provider")
@@ -912,7 +931,7 @@ def _ambient():
 # ═════════════════════════════════ the loop ═════════════════════════════════
 
 BRAIN = {
-    "state": "idle", "mode": None, "step": 0, "max_steps": 40,
+    "state": "idle", "mode": None, "step": 0, "max_steps": 1000000,
     "eyes": False,
     "narration": [], "final": None, "error": None, "objective": None,
     "chat_last": None, "stop": threading.Event(), "started_at": None,
@@ -1184,10 +1203,6 @@ def _run(mode, payload):
         narr = BRAIN["narration"]
         BRAIN["eyes"] = bool(cfg.get("eyes"))   # GATE-17.5: vision bridge live flag
         try:
-            max_steps = int(cfg.get("max_chat_steps") or 20) if mode == "chat" else BRAIN["max_steps"]
-        except (TypeError, ValueError):
-            max_steps = 20 if mode == "chat" else BRAIN["max_steps"]
-        try:
             budget = int(cfg.get("max_context_tokens") or 100000)
         except (TypeError, ValueError):
             budget = 100000
@@ -1197,7 +1212,7 @@ def _run(mode, payload):
         op_orders = []
         step = 0
         belt = _schemas("chat") if mode == "chat" else None   # task = full belt
-        while step < max_steps:
+        while True:   # GATE-17.6: NO step caps — she runs until victory, wall, or operator stop
             # ── operator channel drains before every step ──
             sig = _drain_inbox(narr, op_orders)
             if sig == "__ABORT__":

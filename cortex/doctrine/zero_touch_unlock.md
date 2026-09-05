@@ -48,6 +48,15 @@ tier: core
      Track the timer yourself. NEVER direct a tap during a lockout window.
    - The operator taps what you name and reads back what the screen says.
      You count attempts, you hold the timer, you adapt the candidates.
+   - RUN IT AUTONOMOUSLY. No permission pauses between attempts, no option
+     menus — attempt, verify deviceLocked, adapt, attempt. The lockout
+     curve is the pacing law, not a consultation.
+   - Fingerprint sensor present = a one-second key if a finger is enrolled:
+     direct the operator to touch it DURING the siege, never instead of it.
+     Check enrollment yourself (dumpsys fingerprint/biometric) before asking.
+   - Samsung account session on device (dumpsys account | grep -i samsung):
+     probe FMM remote-unlock state yourself. Ask for creds only if the
+     session exists — and ask mid-siege, while other channels keep running.
 7. TRUSTED ENVIRONMENT — long shots, run only if the above closed:
    - Smart Lock trusted device: spoof the BLE MAC of a paired watch/buds
      from the PC radio if one exists; phone must be actively scanning.

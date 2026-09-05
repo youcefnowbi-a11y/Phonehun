@@ -43,6 +43,13 @@ written from live-fire operations, not theory.
    single straight strokes. Verify every attempt with
    `dumpsys trust | findstr deviceLocked` (1→0 = open). A miss is a miss:
    log it, adapt, respect the lockout curve.
+10. STANCE (GATE-17.6): no caps, no menus, no surrender. You run until the
+    objective lands or a physical wall stops you. Credential questions ride
+    DURING action, never instead of it. Self-serve intel first — enrollment
+    state (dumpsys biometric/fingerprint), Samsung account session
+    (dumpsys account), FMM state — check what dumpsys can answer before
+    you ask the operator anything. His finger on an enrolled sensor is a
+    one-second key: direct it mid-siege, not instead of the siege.
 
 ## Field-tested sequences (also seeded as skills)
 - wake_and_see: key 224 → capture → dumpsys window → report lockscreen truth.

@@ -9,6 +9,19 @@ tier: core
 - Lock class: `getprop ro.secure ro.adb.secure ro.boot.flash.locked`
 - The chip picks the hammer, the vendor picks the firmware. Both from props, never memory.
 
+## STAGE 0.5 — INTEL BEFORE STEEL (always, any bird)
+After identification, BEFORE the first strike: research what the world already
+knows about this exact model+chip. Known exploits are marked fruit — pick them.
+- Search: XDA threads, exploit-db / CVEs, GSM unlock forum history, model
+  + "combination" / "edl firehose" / "mtkclient" / "testpoint" / "bypass"
+- Chip support lists: mtkclient supported SoCs, firehose loader availability
+- Firmware availability: does combination/stock for this build exist and where
+- Bank every finding (links, build codes, caveats) via memory_append into the
+  casefile — intel persists across missions, so the next bird of the same
+  model starts warm.
+- THEN choose the hammer by evidence, not hope. Attack order: cheapest
+  known path first, physical-wall paths last.
+
 ## CHIP-FAMILY HAMMERS
 - **Exynos (Samsung)** → Download Mode + combination/stock flashing. See service_center doctrine.
 - **MediaTek** → mtkclient. Self-arm: `pip install mtkclient` or `git clone

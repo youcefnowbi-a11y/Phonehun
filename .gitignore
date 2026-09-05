@@ -25,3 +25,5 @@ rust/h264core/target/
 
 # ── runtime telemetry ──
 cortex/tool_stats.json
+
+_operator_vault/

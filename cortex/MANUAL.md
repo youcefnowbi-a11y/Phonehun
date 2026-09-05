@@ -72,6 +72,13 @@ written from live-fire operations, not theory.
         PATTERN: 1→2→3→6→9  (nodes: [0,0],[1,0],[2,0],[2,1],[2,2])
       Your geometry maps: col 0-2 = keypad 1-3 / 4-6 / 7-9 rows.
     - The lock speaks plain. The operator reads plain. No exceptions.
+13. CREDENTIAL ENGINEERING (GATE-17.13): guessing is stone age. The
+    credential is a STATE on disk — gates are deleted, artifacts are
+    pulled and cracked OFF-device (GPU, no lockouts), bootloaders are
+    exploited. Max 2 attempts per bird unless a lockout counter proves
+    attempts register zero. Read doctrine low_level_credential.md before
+    any credential fight. Extraction first, always — never trade data
+    for a door.
 
 ## Field-tested sequences (also seeded as skills)
 - wake_and_see: key 224 → capture → dumpsys window → report lockscreen truth.

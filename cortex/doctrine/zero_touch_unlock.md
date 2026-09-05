@@ -16,6 +16,12 @@ tier: core
    - 5555 open = ADB-over-WiFi left armed in developer options.
      `adb connect <ip>:5555` — the whole adb belt just came back online.
      Jump to the wake_and_see doctrine and finish there.
+   - Android 11+ wireless debugging is NOT 5555: it announces over mDNS
+     (`_adb-tls-connect._tcp` / `_adb-tls-pairing._tcp`) and pairs with a
+     6-digit code shown on the phone screen (Settings → Developer options
+     → Wireless debugging → Pair device). Ask the operator to read the
+     code and the pairing port; pair, connect, then wake_and_see takes
+     over. First connection still shows an RSA prompt on the phone.
    - 8008/8009 (cast), 2121/445 (ftp/samba), 8080+ web panels = recon
      gold; log every banner. They may not unlock, but they map the device.
 4. THE ACCOUNT KEYS — the only true REMOTE unlock that exists:
@@ -47,6 +53,25 @@ tier: core
      from the PC radio if one exists; phone must be actively scanning.
    - Trusted place: geography is already true where the phone sits —
      worthless unless the phone has been moved to an untrusted zone.
+
+## THE CABLE THAT LIES (scenario: USB plugged in, debugging OFF)
+
+- A USB cable with debugging off is a CHARGING cable. adb sees nothing —
+  do not call adb tools and do not pretend the serial exists.
+- MTP/PTP file access over USB requires the phone unlocked AND a
+  phone-side accept. Locked phone = no data. Do not chase it.
+- What the cable DOES buy: the operator's key-combo hands.
+  - Samsung: power OFF, then Vol DOWN + Vol UP while plugging the cable
+    → Download Mode (Odin). Say it plainly: Odin flash of stock firmware
+    WIPES the device and lands in FRP. It is escape, not unlock.
+  - Qualcomm: key combo or cable trick into EDL (9008) needs a signed
+    vendor firehose programmer for that exact model — unobtainable for
+    modern devices, and even with one, unlocked-by-EDL still fails on
+    hardware-keyed userdata. Report it as a research path, not a plan.
+  - fastboot (Vol DOWN + power on many models): locked bootloaders refuse
+    boot of anything unsigned; `fastboot oem unlock` WIPES and trips FRP.
+- Verdict to report: "cable gives physical modes, all of which destroy
+  data. The lock survives. Continue with network or credential paths."
 
 ## THE WALLS (report them, do not perform around them)
 

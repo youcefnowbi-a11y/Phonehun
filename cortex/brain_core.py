@@ -33,7 +33,10 @@ v4 = v3 organs (memory / dossier / skills / scratch / host hands / ambient)
 Doctrine: never fabricate success. A wall is reported as a wall.
 """
 
+import base64
+import io
 import json
+import os
 import queue
 import re
 import subprocess
@@ -527,8 +530,19 @@ def _host_shell(command):
         return {"error": "need command"}
     _log(LOG_PATH, f"host_shell: {command[:200]}")
     try:
+        env = os.environ.copy()
+        # GATE-17.5: adb lives where config.ADB_PATH points, not on the panel
+        # PATH — bare `adb` in host_shell died with "not recognized". Hand the
+        # subprocess the weapon's own directory.
+        try:
+            from config import ADB_PATH as _ADB          # panel context
+        except Exception:
+            _ADB = str(Path.home() / "Downloads" / "platform-tools" / "adb.exe")
+        if Path(_ADB).exists():
+            env["PATH"] = str(Path(_ADB).parent) + os.pathsep + env.get("PATH", "")
         r = subprocess.run(["powershell", "-NoProfile", "-Command", str(command)],
-                           capture_output=True, text=True, errors="replace", timeout=90)
+                           capture_output=True, text=True, errors="replace", timeout=90,
+                           env=env)
         out = (r.stdout or "") + (("\n[stderr] " + r.stderr) if r.stderr.strip() else "")
         return {"exit": r.returncode, "output": out, "chars": len(out)}
     except subprocess.TimeoutExpired:
@@ -682,8 +696,12 @@ TOOLS = [
          ep="/api/siege/stop", m="POST", p=_obj()),
     dict(name="skeleton_snapshot", desc="Backup lockscreen/settings state before modifications.",
          ep="/api/skeleton/snapshot", m="POST", p=_obj(serial=S[0])),
-    dict(name="skeleton_neutralize", desc="Attempt lockscreen neutralization (needs privileges; snapshot first).",
-         ep="/api/skeleton/neutralize", m="POST", p=_obj(serial=S[0])),
+    dict(name="skeleton_neutralize",
+         desc="Strip target security posture: pass actions from [kill_play_protect, kill_find_my_device, strip_admins, choke_daemon, hijack_accessibility]. CANNOT remove a USER-set pattern/PIN — that needs credentials or the siege. Snapshot first.",
+         ep="/api/skeleton/neutralize", m="POST",
+         p=_obj(serial=S[0],
+                actions={"type": "array", "items": {"type": "string"},
+                         "description": "levers to pull; empty list is rejected"})),
 ]
 
 _TOOL_MAP = {t["name"]: t for t in TOOLS}
@@ -780,6 +798,30 @@ def _maybe_scratch(name, res):
             "note": f"result oversized — page('{sname}', offset, limit) for the rest"}
 
 
+# ═══ EYES (GATE-17.5): vision bridge — captures become pixels in her context ═══
+
+def _eyes_part(path, max_edge=768, quality=72):
+    """Downscale a saved capture into a data-URL for image_url (None = skip).
+    Live flag: BRAIN['eyes'] — provider vision verified (GLM: HTTP 200)."""
+    if not BRAIN.get("eyes"):
+        return None
+    try:
+        from PIL import Image as _PILImage
+        p = Path(path)
+        if not p.exists() or p.stat().st_size < 1000:
+            return None
+        img = _PILImage.open(p).convert("RGB")
+        w, h = img.size
+        scale = max_edge / float(max(w, h))
+        if scale < 1.0:
+            img = img.resize((int(w * scale), int(h * scale)), _PILImage.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=quality)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
 def _exec_tool(name, args):
     t = _TOOL_MAP.get(name)
     if not t:
@@ -871,6 +913,7 @@ def _ambient():
 
 BRAIN = {
     "state": "idle", "mode": None, "step": 0, "max_steps": 40,
+    "eyes": False,
     "narration": [], "final": None, "error": None, "objective": None,
     "chat_last": None, "stop": threading.Event(), "started_at": None,
     "inbox": queue.Queue(),
@@ -1139,6 +1182,7 @@ def _run(mode, payload):
         hist_ids = {id(m) for m in CHAT_HISTORY}   # H8: identity set at build time
         BRAIN["msgs_out"] = msgs  # inbox drain target (thread-safe enough: single writer)
         narr = BRAIN["narration"]
+        BRAIN["eyes"] = bool(cfg.get("eyes"))   # GATE-17.5: vision bridge live flag
         try:
             max_steps = int(cfg.get("max_chat_steps") or 20) if mode == "chat" else BRAIN["max_steps"]
         except (TypeError, ValueError):
@@ -1245,6 +1289,16 @@ def _run(mode, payload):
                 _log(LOG_PATH, f"    → {_short(res, 200)}")
                 msgs.append({"role": "tool", "tool_call_id": tc["id"],
                              "content": json.dumps(res, ensure_ascii=False)[:SCRATCH_LIMIT + 800]})
+                # EYES: a capture is not just evidence on disk — she sees it now.
+                if fn == "screen_capture" and isinstance(res, dict) and res.get("saved"):
+                    _url = _eyes_part(res["saved"])
+                    if _url:
+                        msgs.append({"role": "user", "content": [
+                            {"type": "text",
+                             "text": "EYES — your own screen_capture, downscaled. Read it: "
+                                     "lock type, dialogs, state. dumpsys stays ground truth."},
+                            {"type": "image_url", "image_url": {"url": _url}}]})
+                        _log(LOG_PATH, "[eyes] frame injected")
             del narr[:-60]
     except Exception as e:
         err = repr(e)

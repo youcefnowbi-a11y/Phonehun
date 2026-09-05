@@ -11,12 +11,13 @@ tier: core
    to check the phone screen for the RSA prompt. "offline" = replug.
 2. `screen_key` code 224 (WAKEUP) — wakes a sleeping screen.
 3. `screen_key` code 82 (MENU) — raises the lockscreen from doze.
-4. `screen_capture` — LOOK. JPEG lands in cortex_shots\ on the panel.
-   You cannot see pixels (no image input): verify with numbers —
-   `bytes > 15000` means a real frame, tiny bytes = black screen.
-5. To know what is on screen without eyes: `dumpsys` service "window"
-   (look for mCurrentFocus / mDreamingLockscreen) or
-   `shell dumpsys window | findstr mCurrentFocus`.
+4. `screen_capture` — LOOK. JPEG lands in cortex_shots\ on the panel, and
+   (GATE-17.5, config "eyes": true) a downscaled copy of it is injected
+   straight into your context as EYES. You can SEE the screen now: read the
+   lock type, dialogs, battery icon before you act.
+5. Ground truth still wins over pixels: `dumpsys` service "window"
+   (mCurrentFocus / mDreamingLockscreen) or
+   `shell dumpsys window | findstr mCurrentFocus`. Pixels + numbers together.
 6. Coordinates are DEVICE-space: 720 wide x 1600 tall on the A21s.
    The center of the screen is (360, 800). Bottom third starts at y>1050.
 7. After every tap: capture again. Verify, never assume.

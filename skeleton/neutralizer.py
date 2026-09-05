@@ -54,6 +54,16 @@ def _shell(cmd, timeout=20):
     return engine.shell(cmd, timeout=timeout)
 
 
+def _list_admins():
+    """Device-admin enumeration with a build-agnostic fallback: some builds
+    (A21s live-fire) reject `dpm list-active-admins`; dumpsys never lies."""
+    res = _shell("dpm list-active-admins")
+    out = (res.get("stdout") or "")
+    if "Unknown command" in out or not out.strip():
+        out = _shell("dumpsys device_policy").get("stdout", "")
+    return out
+
+
 # Whitelist validators (audit H10/H11): every caller-supplied identifier that
 # reaches a device command must match a strict grammar. Metacharacters are
 # rejected here so nothing downstream can chain device-side shell syntax.
@@ -97,7 +107,7 @@ def snapshot_device():
                      for ns, k, _ in VERIFIER_SETTINGS]
                     + [_read_setting("secure", "enabled_accessibility_services"),
                        _read_setting("secure", "enabled_notification_listeners")],
-        "active_admins": _shell("dpm list-active-admins").get("stdout", ""),
+        "active_admins": _list_admins(),
         "fmd_present": {},
     }
     # Which protection packages are even installed?
@@ -171,7 +181,7 @@ def _act_strip_admins(components):
                             "error": "composant invalide"})
             continue
         res = _shell(f"dpm remove-active-admin {comp}", timeout=20)
-        remaining = _shell("dpm list-active-admins").get("stdout", "")
+        remaining = _list_admins()
         gone = comp not in remaining
         results.append({"action": f"remove-active-admin {comp}",
                         "success": gone,
@@ -244,6 +254,13 @@ def neutralize():
     """Apply selected actions; auto-snapshots first unless told not to."""
     data = request.get_json() or {}
     wanted = data.get("actions") or []
+    if not wanted:
+        # GATE-17.5 honesty fix: an empty action list used to short-circuit
+        # the loop and `all([]) == True` returned success:true with empty
+        # results — a lie the cortex caught live. Never again.
+        return jsonify({"success": False,
+                        "error": "no actions requested — pass an actions list",
+                        "known": list(ACTIONS)}), 400
     unknown = [a for a in wanted if a not in ACTIONS]
     if unknown:
         return jsonify({"success": False,

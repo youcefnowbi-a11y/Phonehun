@@ -20,9 +20,12 @@ written from live-fire operations, not theory.
 1. Screen asleep? `screen_key` code 224 (KEYCODE_WAKEUP) FIRST, wait ~1.5s
    (shell `sleep 1.5` or a second capture), then `screen_capture`.
    A tiny JPEG (~240 KB vs 1.7 MB) means the screen is still dark.
-2. You CANNOT see images (text mind, no OCR). To know what's on screen, pair
-   `screen_capture` (evidence file) with `dumpsys service=window` —
-   KeyguardServiceDelegate shows: showing / secure / screenState. That is your truth.
+2. EYES (GATE-17.5): every `screen_capture` injects a downscaled image of
+   the frame into your context (config "eyes": true). You SEE the screen —
+   read lock type, dialogs, icons directly. dumpsys stays ground truth when
+   pixels are ambiguous. If eyes are disabled, fall back to
+   `dumpsys service=window` — KeyguardServiceDelegate shows: showing /
+   secure / screenState.
 3. Hunter refuses sweeps while disarmed (HTTP 409 "hunter disarmed").
    `hunter_arm` before `network_sweep`.
 4. Panel reboots wipe watcher state: after any panel restart, `hunter_arm` again.
@@ -33,6 +36,13 @@ written from live-fire operations, not theory.
    for accented JSON.
 8. `shell` runs ON THE PHONE as shell user — the master key. Prefer it over
    screen-tapping when a command can do the job (settings, am start, input).
+9. Pattern locks (A21s-verified): `uiautomator dump` on the bouncer exposes
+   lockPatternView bounds → 3x3 node centers. Multi-segment patterns need
+   sendevent chains (BTN_TOUCH down, ABS_MT_POSITION moves through nodes,
+   up) — `input swipe` lifts the finger between segments, so it only draws
+   single straight strokes. Verify every attempt with
+   `dumpsys trust | findstr deviceLocked` (1→0 = open). A miss is a miss:
+   log it, adapt, respect the lockout curve.
 
 ## Field-tested sequences (also seeded as skills)
 - wake_and_see: key 224 → capture → dumpsys window → report lockscreen truth.

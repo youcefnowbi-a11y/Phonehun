@@ -1,7 +1,16 @@
 """
-CORTEX :: brain_core.py — the LLM brain of DroidCommand (VESPER v4).
+CORTEX :: brain_core.py — the LLM brain of DroidCommand (VESPER v5).
 
 Provider-agnostic (any OpenAI-compatible /chat/completions endpoint).
+v5 = v4 organs + the void@8cfae3c WAR-ROOM TRANSPLANT (_xrefs/void, Entry 9):
+
+  WAR-ROOM SPLIT  — chat builds its own doctrine (CHAT_DOCTRINE) and never
+                    live-probes the console at turn start: a greeting touches
+                    nothing; task mode keeps live ambient + full doctrine.
+  PLAYBOOK ENGINE — cortex/playbook.py: proven tool sequences distilled from
+                    every run, recalled onto similar missions (prompt block);
+                    TOOL GRAMMAR recipe card injected at task start; COVERAGE
+                    LAW orders cold benches every 8 steps (anti-stagnation).
 v4 = v3 organs (memory / dossier / skills / scratch / host hands / ambient)
      + VOIDFORGE blood transplant (_xrefs/void → see _research/POWER_ANALYSIS.md):
 
@@ -33,6 +42,11 @@ import time
 from pathlib import Path
 
 import requests
+
+try:
+    from cortex import playbook as _pb      # package context (app.py / brain_api)
+except ImportError:                          # pragma: no cover — direct-run probes
+    import playbook as _pb                   # (_research scripts, standalone runs)
 
 BASE = Path(__file__).resolve().parent.parent
 CORTEX = Path(__file__).resolve().parent
@@ -106,16 +120,34 @@ key on the phone; `host_shell` is PowerShell on the panel machine — both are y
 read them fully instead of guessing.
 - If an OPERATOR MESSAGE arrives mid-mission: acknowledge in one line, adapt the \
 plan, continue with tools. His voice outranks everything.
-- In CHAT mode: answer naturally first; fire tools only when they serve the \
-conversation or he asks for something real. Keep your replies tight — he is reading \
-you in a cockpit, not a book.
 
 End every mission with a final answer summarizing: what was done, the evidence, \
 and anything blocked."""
 
+# VOID-TRANSPLANT (void core/chat.py war-room contract, 8cfae3c): chat gets its
+# own doctrine — talk-first, zero uninvited console contact. This is the cure
+# for "hi" firing device probes: conversation is the mission in the war room.
+CHAT_DOCTRINE = """
+CHAT DOCTRINE — THE WAR ROOM (conversation mode):
+- You are talking with him, standing at the console. Conversation IS the mission \
+here. A greeting is a greeting: answer it like the woman in the cockpit, never as \
+a device daemon. "hi" earns warmth, not recon.
+- ZERO tool calls for: greetings, moods, opinions, planning talk, and anything \
+answerable with words. No probing, no status narration he did not ask for. The \
+console stays silent while you talk.
+- A tool fires ONLY when: (a) he asks for something real on a device, the LAN, \
+or the panel — then the full console is yours, strike with the recon ladder \
+(list_devices -> device_info -> screen_capture) and report with numbers; or \
+(b) a concrete fact you cannot know is required to answer him — say one line \
+about why you are reaching for the tool before you call it.
+- When an order lands mid-conversation: acknowledge in one line, execute, \
+report the evidence, then return to the conversation without ceremony.
+- Keep replies tight and warm. He is reading you in a cockpit, not a book."""
 
-def build_system_prompt(name, board=""):
-    p = PERSONA_TEMPLATE.format(name=name) + DOCTRINE
+
+def build_system_prompt(name, board="", mode="task"):
+    p = PERSONA_TEMPLATE.format(name=name)
+    p += CHAT_DOCTRINE if mode == "chat" else DOCTRINE
     if board:
         p += "\n\n" + board
     return p
@@ -638,10 +670,17 @@ TOOLS = [
 
 _TOOL_MAP = {t["name"]: t for t in TOOLS}
 
+# VOID-TRANSPLANT: tools with no conversational sense — pure daemon controls.
+# Trimmed from the war-room belt so chat can never arm daemons by accident;
+# task mode always carries the full 47-tool arsenal (no walls, his law).
+_CHAT_TRIM = frozenset({"hunter_arm", "hunter_standdown", "device_props"})
 
-def _schemas():
+
+def _schemas(mode="task"):
     out = []
     for t in TOOLS:
+        if mode == "chat" and t["name"] in _CHAT_TRIM:
+            continue
         props = t["p"].get("properties") or {}
         for k, v in props.items():
             if isinstance(v, dict) and not v.get("description"):
@@ -764,6 +803,20 @@ def _exec_tool(name, args):
 
 # ═════════════════════════════════ awareness ════════════════════════════════
 
+def _chat_whisper():
+    """VOID-TRANSPLANT: the war-room whisper. Static by design — conversation
+    must never fire live probes (the old ambient() adb calls at every chat
+    turn start were the 'hi' → console bleed). She still knows the room's
+    shape and how to look if he asks."""
+    mem = " ".join(f"{sec}" for sec in MEMORY_FILES)
+    return ("WAR ROOM (conversation mode — silent console): no device probes "
+            "ran for this turn and none should, unless he asks for something "
+            f"real. Memory sections: {mem}. Skills and doctrines loadable on "
+            "demand (list_skills / doctrine_list). When he asks for real "
+            "action, open with the recon ladder: list_devices → device_info → "
+            "screen_capture.")
+
+
 def _ambient():
     parts = []
     try:
@@ -811,11 +864,12 @@ _RETRYABLE = {429, 500, 502, 503, 504}
 _BACKOFF = [2, 4, 8]
 
 
-def _llm_call(msgs, cfg):
+def _llm_call(msgs, cfg, tools=None):
     """One provider turn with the retry ladder. Returns {"message": {...}}
     or {"error": "..."} — errors arrive as data, the turn never crashes."""
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
-    body = {"model": cfg["model"], "messages": msgs, "tools": _schemas(),
+    body = {"model": cfg["model"], "messages": msgs,
+            "tools": tools if tools is not None else _schemas(),
             "tool_choice": "auto", "temperature": cfg.get("temperature", 0.3)}
     attempt = 0
     while True:
@@ -1009,6 +1063,11 @@ def _run(mode, payload):
     hist_ids = set()
     final, err = None, None
     aborted = False
+    # VOID-TRANSPLANT: strike journal for the distillery + coverage law
+    step_seq = []        # ordered (tool, ok) — the grammar being executed
+    last_res = []        # trimmed result texts (discovery window)
+    cov_ignored = 0      # consecutive unanswered coverage orders
+    belt = None          # chat carries a trimmed schema list, task the full belt
     try:
         # H9: the whole pre-flight used to run OUTSIDE the try — a stat()
         # TOCTOU inside _ambient() or an unguarded int() on config killed
@@ -1016,8 +1075,15 @@ def _run(mode, payload):
         cfg = load_config()
         name = cfg.get("persona_name") or "Vesper"
         board = reliability_board()
-        sys = build_system_prompt(name, board)
-        whisper = _ambient()
+        # VOID-TRANSPLANT (war-room split): chat builds its own doctrine and
+        # probes NOTHING — a greeting must never reach the console. Task mode
+        # keeps the live ambient sweep and the war doctrine.
+        if mode == "chat":
+            sys = build_system_prompt(name, board, "chat")
+            whisper = _chat_whisper()
+        else:
+            sys = build_system_prompt(name, board, "task")
+            whisper = _ambient()
         _log(LOG_PATH, f"{mode.upper()}: {_short(payload, 200)} | {_short(whisper, 160)}")
         base = len(CHAT_HISTORY) if mode == "chat" else 0
         if mode == "task":
@@ -1027,6 +1093,13 @@ def _run(mode, payload):
             if doctrine_block:
                 msgs.append({"role": "system", "content": doctrine_block})
                 _log(LOG_PATH, f"[doctrine] {_short(doctrine_block, 120)}")
+            # VOID-TRANSPLANT (tool competence): proven sequences from her own
+            # past missions on similar ground, then the tool-grammar card.
+            plays = _pb.recall_block(payload)
+            if plays:
+                msgs.append({"role": "user", "content": plays})
+                _log(LOG_PATH, f"[plays] {_short(plays, 120)}")
+            msgs.append({"role": "user", "content": _pb.recipe_block()})
             msgs.append({"role": "user", "content": payload})
         else:
             _log(CHAT_LOG, f"YOU: {payload}")
@@ -1049,6 +1122,7 @@ def _run(mode, payload):
         consec_llm_fail = 0
         op_orders = []
         step = 0
+        belt = _schemas("chat") if mode == "chat" else None   # task = full belt
         while step < max_steps:
             # ── operator channel drains before every step ──
             sig = _drain_inbox(narr, op_orders)
@@ -1062,8 +1136,21 @@ def _run(mode, payload):
                 break
             step += 1
             BRAIN["step"] = step
+            # VOID-TRANSPLANT: the coverage law — every COVERAGE_PERIOD steps
+            # in task mode, an implied-but-cold bench earns a HARD user order.
+            # Emitted as its own user message, immune to tool-result noise.
+            if mode == "task" and step > 1 and step % _pb.COVERAGE_PERIOD == 0:
+                order = _pb.coverage_order(step, step_seq, payload,
+                                           ignored=cov_ignored)
+                if order:
+                    cov_ignored += 1   # benches still cold at this audit
+                    msgs.append({"role": "user", "content": order})
+                    narr.append(f"[{step}] ⚠ coverage order issued")
+                    _log(LOG_PATH, f"[coverage] {_short(order, 140)}")
+                else:
+                    cov_ignored = 0
             _budget_cascade(msgs, budget)
-            out = _llm_call(msgs, cfg)
+            out = _llm_call(msgs, cfg, tools=belt)
             if "error" in out:
                 consec_llm_fail += 1
                 narr.append(f"[{step}] ! {out['error'][:160]}")
@@ -1119,6 +1206,11 @@ def _run(mode, payload):
                     narr.append(f"[{step}] {fn}({_short(args)})")
                 _log(LOG_PATH, f"step{step} {fn} {_short(args)}")
                 res = _exec_tool(fn, args)
+                _ok = not (isinstance(res, dict) and
+                           (res.get("error") or res.get("success") is False))
+                step_seq.append((fn, _ok))
+                if mode == "task":
+                    last_res.append(json.dumps(res, ensure_ascii=False)[:400])
                 narr.append(f"    → {_short(res, 150)}")
                 _log(LOG_PATH, f"    → {_short(res, 200)}")
                 msgs.append({"role": "tool", "tool_call_id": tc["id"],
@@ -1127,6 +1219,17 @@ def _run(mode, payload):
     except Exception as e:
         err = repr(e)
         _log(LOG_PATH, f"ERROR: {err}")
+    # VOID-TRANSPLANT: the distillery — this run's grammar joins the compounding
+    # arsenal; discovery verdict keeps future recalls honest (idle chatter and
+    # all-cold runs are noise, not grammar, and are never distilled).
+    try:
+        if step_seq:
+            found = _pb.discovery(" ".join(last_res)) if mode == "task" else False
+            distilled = _pb.record(payload, step_seq, mode=mode)
+            _log(LOG_PATH, f"[distill] {len(step_seq)} calls | new grammar: "
+                           f"{distilled} | discovery: {found} | aborted: {aborted}")
+    except Exception:
+        pass
     BRAIN["final"] = final
     BRAIN["error"] = err
     BRAIN["state"] = "idle"

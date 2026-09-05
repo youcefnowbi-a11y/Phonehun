@@ -572,3 +572,103 @@ so the next auditor can grep `# H` / `# M` / `# L1` for fix provenance.
 **Post-fix state:** compile 676/678 (2 pre-existing non-Python archives), geo_math selftest
 15/15, brain_core deep_access cve_bypass all PASS. Ledger remains the calibration record;
 Entry 8 closes the remediation loop.
+
+### Entry 9 — the void@8cfae3c sync, organ audit & WAR-ROOM transplant
+
+**Driver:** operator complaint — (1) chat bled into the console (a greeting "hi" fired live
+device probes); (2) Vesper lacked tool-calling competence ("she doesn't know how to use her
+tools"). Remedy per operator's own direction: update the stale `_xrefs/void` clone of
+youcefnowbi-a11y/void, audit its organs, and transplant the powerful patterns into the cortex.
+
+**The sync.** Old mirror was stale (missing 7 organs). Live tip `8cfae3cd89fadb214d88a627514e8da74f0a8ac2`
+("VOIDFORGE ULTIMATE FORGE: Omega-wave complete (P0-P4), calibration missions A-D3, final
+audit wave 1 (21 findings fixed), PRIME LAW P0") mirrored byte-exact into `_xrefs/void`
+(689 files, robocopy /MIR, provenance `_xrefs/void/_UPSTREAM_TIP.txt`: sha1 verify —
+core/agent.py = 169,941 B). Lesson stamped: the repo moves — never trust raw.githubusercontent
+or a cached manifest; `git clone --depth 1` is the only honest sync.
+
+**The organ audit (full reads, cited).**
+- `core/chat.py` (371 ln) — the war-room contract: chat is a separate organ with a CURATED
+  mini-arsenal, never fires tools uninvited, operator voice exported as `ORDRES DU
+  COMMANDANT`, refusal armor stages, provider errors never enter history. **This is the
+  separation pattern our chat mode was missing.**
+- `core/playbooks.py` (116 ln) — distills proven tool sequences per mission
+  (`data/playbooks.json`, cap 60); fingerprint = stack keywords; `prompt_block` injects
+  top-2 sequences with score>0 overlap; atomic save with Windows PermissionError retry (3×).
+- `core/learned_plays.py` (338 ln) — compounding arsenal over a tool_runs DB; dedupe by
+  grammar IDENTITY not tool name; unattributable plays rejected. We take the grammar-identity
+  lesson; our journal is in-loop (no sqlite dependency).
+- `core/beliefs.py` (172 ln) — Bayesian target-science ledger (verdict CONFIRMED/REFUTED,
+  confidence walk toward latest verdict ×2); proven violations float first. **Not transplanted
+  this wave** — Vesper's doctrine router + reliability board cover the fact-cache role; the
+  ledger is queued for a future device-science wave (per-serial/package tested facts).
+- `core/capability_vault.py` (250 ln) — unified ranked view over play/skill/forged stores,
+  2200-char prompt cap, corrupt-store degrades to honest empty. **Role covered** by our
+  reliability board (brain_core L~700) + new playbooks recall.
+- `core/coverage.py` (237 ln) — Tier F1/F5/F6: every COVERAGE_PERIOD rounds, cold watched
+  benches earn a HARD user-message order naming concrete untried tools; ignored orders
+  escalate; discovery regex separates "tool ran ok" from "run FOUND something" (Goodhart
+  defense); bench tags prefixed onto tool descs. **Transplanted whole**, benches re-mapped
+  to our Android lanes.
+- `core/scrub.py` (129 ln), `core/op_identity.py` (79 ln), `core/target_model.py` (164 ln) —
+  operator-identity scrubbing at deliverable-write time, burnable per-host personas, living
+  endpoint grammar per target. **Web-egress organs, not transplanted**: our deliverables are
+  the panel itself (token-gated, LAN); recorded here as VOID-INFO (future: scrub narrations
+  if the panel ever ships client-bound reports).
+- `core/agent.py` (2,504 ln, 169,941 B) — wiring seams read (L1413 learned_plays recall,
+  L1441 capability vault injection, L1462-1485 beliefs+target-model user-messages at mission
+  start, L2400-2436 periodic coverage order as its own user message, L2438-2447 context diet).
+  Round-0 injection ORDER (posture → vault → target model → ledger → intel → plays) is the
+  shape our task-start injection now follows.
+
+**The transplant (all provenance-commented `# VOID-TRANSPLANT`):**
+- NEW `cortex/playbook.py` (~330 ln) — three organs, pure stdlib, never imports brain_core
+  (mirrors void coverage.py discipline):
+  1. DISTILLERY — `record(mission, seq, mode)` harvests the executed (tool, ok) journal of
+     every run (task AND chat); dedupe by first-10-tool grammar identity; cap 60 at
+     `cortex/memory/playbooks.json`; Windows atomic-save with PermissionError retry.
+     `recall_block(mission)` scores keyword-fingerprint overlap (`DROID_STACKS`: screen/
+     comms/files/siege/network/apps/host/recon/surveillance/deep) and injects up to 2 PROVEN
+     SEQUENCES with the floor-not-ceiling clause.
+  2. RECIPE CARD — `RECIPE_BLOCK`: the domain grammar of the belt (recon ladder, see/act
+     cadence, siege ritual, network strike order, comms pull, files order, shell-is-master-key,
+     page-walking, evidence/snapshot/honest-negative laws). Injected at every TASK start.
+  3. COVERAGE LAW — `coverage_order(step, ok_seq, mission, ignored)`: every 8 task steps,
+     an implied-but-cold bench earns a hard user-message order naming concrete untried
+     weapons; ignored orders escalate at 2 ("His patience thins"); `discovery()` regex
+     ("count":N, "unlocked":true, "bytes":N, serial hits…) distinguishes productivity from
+     motion.
+- `cortex/brain_core.py` (now ~1,240 ln, VESPER v5):
+  - `_chat_whisper()` (L~805) — chat turns probe NOTHING; static war-room whisper replaces
+    the live `_ambient()` adb sweep that caused the "hi" bleed. `_ambient()` remains
+    task-mode-only (L~820).
+  - `CHAT_DOCTRINE` (L~128) — the war-room contract: "hi earns warmth, not recon"; zero tool
+    calls for anything answerable with words; full console opens only on real orders, with
+    the recon ladder; one-line why before any conversational tool call. `build_system_prompt`
+    (L~148) is mode-aware: chat gets CHAT_DOCTRINE, task keeps war DOCTRINE.
+  - `_CHAT_TRIM` (L~685) + `_schemas(mode)` (L~689) — chat belt sheds the three pure daemon
+    controls (`hunter_arm`, `hunter_standdown`, `device_props`): chat can never arm the
+    auto-striker by accident; task mode carries the full 48-tool arsenal (his law: no walls).
+  - `_llm_call(msgs, cfg, tools=None)` (L~867) — belt threading; task sends the full schema
+    list, chat its 45.
+  - `_run` (L~1060+): pre-flight splits per mode; task start injects recall_block + recipe
+    card (void round-0 order, doctrine first, plays+grammar after); loop journals every call
+    as (tool, ok) with a discovery window; coverage law ticks at COVERAGE_PERIOD boundaries;
+    tail distills the grammar into the playbook store on EVERY run (task and chat), logging
+    `[distill]` receipts.
+
+**Verification (receipts, this session):** `python -m py_compile` on cortex/brain_core.py,
+cortex/playbook.py, cortex/brain_api.py, app.py — **4/4 PASS**. Functional gate
+`_research/test_warroom.py` — distillery record/dedupe/reject-noise/recall all TRUE;
+coverage order fires cold + stays silent when covered; discovery regex verified both ways;
+chat/task doctrine isolation verified (no cross-contamination); belts 48/45 with exactly
+{device_props, hunter_arm, hunter_standdown} trimmed; whisper silence verified.
+V-series findings: V1 (chat ambient-probe bleed — FIXED this entry), V2 (no tool grammar
+taught — FIXED via recipe card + plays), V3 (beliefs/target-science ledger — QUEUED,
+deliberate), V4 (scrub/op_identity web-egress organs — INFO, not applicable to panel), V5
+(void playbook.py superseded by learned_plays upstream — we transplanted the learned_plays
+lesson into our single distillery).
+
+**Files touched this entry:** cortex/playbook.py (new), cortex/brain_core.py, AUDIT_HANDOFF.md,
+_research/test_warroom.py (new gate), _xrefs/void/** (sync mirror, out-of-scope-for-audit
+reference tree per Section header above).

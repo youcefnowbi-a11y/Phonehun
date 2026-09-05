@@ -23,7 +23,8 @@ if custom_adb_path.exists():
 elif shutil.which("adb"):
     ADB_PATH = "adb"
 else:
-    ADB_PATH = str(custom_adb_path)
+    # Fail fast: binding a nonexistent path just breaks every engine call later.
+    raise FileNotFoundError("adb not found: set ADB path in config or add adb to PATH")
 
 HOST = "127.0.0.1"
 PORT = 5000

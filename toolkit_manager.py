@@ -1,7 +1,8 @@
 import shlex
-import time
 import re
+import uuid
 from pathlib import Path
+from flask import request
 from config import TEMP_DIR
 
 class ToolkitManager:
@@ -111,34 +112,52 @@ class ToolkitManager:
             "/data/misc/wifi/wpa_supplicant.conf",
             "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
         ]
+        reveal = request.args.get("reveal") == "1"
+
+        def _mask(psk):
+            # Open-network placeholders stay as-is; real PSKs are masked by
+            # default (last 2 chars) unless ?reveal=1.
+            open_net = psk in ("(Réseau ouvert / Aucun)", "(Aucun)")
+            if open_net or reveal:
+                return psk, False
+            return ("••" + psk[-2:] if len(psk) >= 2 else "••"), True
+
         found = []
         for p in paths:
             res = self.adb.shell(f"cat {p}")
             if res.get("success") and ("<WifiConfiguration>" in res.get("stdout", "") or "network={" in res.get("stdout", "")):
                 content = res["stdout"]
-                # XML style
-                ssids = re.findall(r'<string name="SSID">"?(.*?)"?</string>', content)
-                psks = re.findall(r'<string name="PreSharedKey">"?(.*?)"?</string>', content)
-                
-                for i in range(len(ssids)):
-                    psk = psks[i] if i < len(psks) else "(Réseau ouvert / Aucun)"
-                    found.append({"ssid": ssids[i], "password": psk, "source": p})
-                
+                # XML style — parse per <WifiConfiguration> block so a missing
+                # PreSharedKey simply means an open network (no list-zip misattribution)
+                for block in content.split("</WifiConfiguration>"):
+                    s_m = re.search(r'<string name="SSID">"?(.*?)"?</string>', block)
+                    if not s_m:
+                        continue
+                    p_m = re.search(r'<string name="PreSharedKey">"?(.*?)"?</string>', block)
+                    pw, was_masked = _mask(p_m.group(1) if p_m else "(Réseau ouvert / Aucun)")
+                    found.append({"ssid": s_m.group(1), "password": pw, "psk_masked": was_masked, "source": p})
+
                 # WPA style
                 wpa_blocks = re.findall(r'network=\{([^}]+)\}', content)
                 for block in wpa_blocks:
                     s_m = re.search(r'ssid="?([^"\n]+)"?', block)
                     p_m = re.search(r'psk="?([^"\n]+)"?', block)
                     if s_m:
+                        pw, was_masked = _mask(p_m.group(1) if p_m else "(Aucun)")
                         found.append({
                             "ssid": s_m.group(1),
-                            "password": p_m.group(1) if p_m else "(Aucun)",
+                            "password": pw,
+                            "psk_masked": was_masked,
                             "source": p
                         })
                 if found:
                     break
 
-        return {"wifi_networks": found, "count": len(found)}
+        out = {"wifi_networks": found, "count": len(found)}
+        if not reveal:
+            out["masked"] = True
+            out["note"] = "PSK masqués — ajoutez ?reveal=1 pour révéler"
+        return out
 
     def dump_accounts(self):
         """
@@ -212,12 +231,16 @@ class ToolkitManager:
         return {"bloatware": result}
 
     def disable_bloat_package(self, package_name):
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+", package_name):
+            return {"success": False, "error": "Nom de package invalide"}
         safe_pkg = shlex.quote(package_name)
         res = self.adb.shell(f"pm uninstall -k --user 0 {safe_pkg}")
         ok = "Success" in res.get("stdout", "")
         return {"success": ok, "stdout": res.get("stdout", ""), "error": res.get("stderr", "")}
 
     def restore_bloat_package(self, package_name):
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+", package_name):
+            return {"success": False, "error": "Nom de package invalide"}
         safe_pkg = shlex.quote(package_name)
         res = self.adb.shell(f"cmd package install-existing {safe_pkg}")
         ok = "Installed" in res.get("stdout", "") or res.get("success", False)
@@ -239,19 +262,29 @@ class ToolkitManager:
         }
 
     def trigger_vibration(self, duration_ms=500):
-        duration_ms = max(50, min(5000, int(duration_ms)))
+        try:
+            duration_ms = max(50, min(5000, int(duration_ms)))
+        except (TypeError, ValueError):
+            return {"success": False, "error": "Paramètre invalide"}
         res = self.adb.shell(f"cmd vibrator vibrate {duration_ms}")
         return {"success": res["success"]}
 
     def set_brightness(self, level=150):
-        level = max(0, min(255, int(level)))
+        try:
+            level = max(0, min(255, int(level)))
+        except (TypeError, ValueError):
+            return {"success": False, "error": "Paramètre invalide"}
         res = self.adb.shell(f"settings put system screen_brightness {level}")
         return {"success": res["success"], "brightness": level}
 
     def record_screen(self, duration_sec=5):
-        duration_sec = max(1, min(30, int(duration_sec)))
-        remote_tmp = "/sdcard/screen_record_tmp.mp4"
-        local_dest = TEMP_DIR / f"rec_{int(time.time())}.mp4"
+        try:
+            duration_sec = max(1, min(30, int(duration_sec)))
+        except (TypeError, ValueError):
+            return {"success": False, "error": "Paramètre invalide"}
+        rec_id = uuid.uuid4().hex
+        remote_tmp = f"/sdcard/screen_record_{rec_id}.mp4"
+        local_dest = TEMP_DIR / f"rec_{rec_id}.mp4"
         
         self.adb.shell(f"screenrecord --time-limit {duration_sec} {remote_tmp}", timeout=duration_sec + 10)
         pull_res = self.adb.run_cmd(["pull", remote_tmp, str(local_dest)], timeout=60)

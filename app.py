@@ -4,6 +4,7 @@ import csv
 import io
 import shlex
 import hashlib
+import re
 import secrets
 import time
 from pathlib import Path
@@ -675,7 +676,7 @@ def cve_scan():
     data = request.get_json(silent=True) or {}
     if not serial:
         serial = data.get("serial")
-    target_ip = data.get("ip", "").strip()
+    target_ip = str(data.get("ip") or "").strip()
 
     # If no IP provided, audit the active ADB device!
     if not target_ip:
@@ -705,6 +706,21 @@ def cve_scan():
             "vulnerabilities": cves,
             "status": "AUDITED"
         })
+
+    # H1: key_type/target_port/cmd_to_run were referenced but NEVER defined
+    # in scope → NameError → 500 on every IP-supplied request (the exploit
+    # branch was dead code as shipped). Wire them from the panel payload
+    # with guarded casts + bounds before any attempt is built.
+    try:
+        target_port = int(data.get("port") or 0)
+    except (TypeError, ValueError):
+        target_port = 0
+    if not (0 < target_port < 65536) or \
+            not re.fullmatch(r"[0-9A-Za-z_.:\-]{3,253}", target_ip):
+        return jsonify({"success": False,
+                        "error": "ip/port invalides"}), 400
+    key_type = data.get("key_type") or None
+    cmd_to_run = data.get("cmd") or None
 
     # Build attempt matrix
     if key_type:

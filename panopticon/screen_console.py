@@ -15,6 +15,7 @@ it like a VNC console. Every interaction rides serial targeting.
 
 import io
 import logging
+import math
 
 from flask import Blueprint, jsonify, request, Response, send_file
 
@@ -29,6 +30,31 @@ engine = ADBEngine()
 def _serial():
     data = request.get_json(silent=True) or {}
     return (request.args.get("serial") or data.get("serial") or "").strip() or None
+
+
+_COORD_MAX = 100000   # sanity ceiling so junk never reaches `input` cmds
+
+
+def _int_or_none(v):
+    """float→int; NaN/inf/junk rejected (isfinite + conversion guarded)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(f):
+        return None
+    try:
+        return int(f)
+    except (ValueError, OverflowError):
+        return None
+
+
+def _clamp_coord(v):
+    return max(0, min(int(v), _COORD_MAX))
+
+
+def _clamp_duration(v):
+    return max(50, min(int(v), 60000))   # ms — outside this `input swipe` misbehaves
 
 
 @screen_bp.route("/frame")
@@ -53,18 +79,19 @@ def frame():
     # Only fix CRLF if adb on Windows mangled \n into \r\r\n
     if data.startswith(b"\x89PNG\r\r\n\x1a\r\n"):
         data = data.replace(b"\r\r\n", b"\r\n")
-    return Response(data, mimetype="image/png")
+    return Response(data, mimetype="image/png",
+                    headers={"Cache-Control": "no-store"})
 
 
 @screen_bp.route("/tap", methods=["POST"])
 def tap():
     data = request.get_json() or {}
     serial = (data.get("serial") or "").strip() or None
-    try:
-        x = int(float(data["x"]))
-        y = int(float(data["y"]))
-    except (KeyError, TypeError, ValueError):
+    x = _int_or_none(data.get("x"))
+    y = _int_or_none(data.get("y"))
+    if x is None or y is None:
         return jsonify({"success": False, "error": "x/y requis"}), 400
+    x, y = _clamp_coord(x), _clamp_coord(y)
     res = engine.shell(f"input tap {x} {y}", serial=serial, timeout=10)
     return jsonify({"success": res["success"], "tapped": [x, y],
                     "stderr": res.get("stderr")})
@@ -77,14 +104,15 @@ def swipe():
 
     # Format A: Direct device coordinates {x1, y1, x2, y2, duration}
     if "x1" in data and "y1" in data and "x2" in data and "y2" in data:
-        try:
-            x1 = int(float(data["x1"]))
-            y1 = int(float(data["y1"]))
-            x2 = int(float(data["x2"]))
-            y2 = int(float(data["y2"]))
-            duration = int(float(data.get("duration", data.get("ms", 300))))
-        except (ValueError, TypeError):
+        x1 = _int_or_none(data["x1"])
+        y1 = _int_or_none(data["y1"])
+        x2 = _int_or_none(data["x2"])
+        y2 = _int_or_none(data["y2"])
+        duration = _int_or_none(data.get("duration", data.get("ms", 300)))
+        if None in (x1, y1, x2, y2, duration):
             return jsonify({"success": False, "error": "Coordonnées invalides"}), 400
+        x1, y1, x2, y2 = (_clamp_coord(v) for v in (x1, y1, x2, y2))
+        duration = _clamp_duration(duration)
         res = engine.shell(f"input swipe {x1} {y1} {x2} {y2} {duration}", serial=serial, timeout=12)
         return jsonify({"success": res["success"], "swiped": [x1, y1, x2, y2], "stderr": res.get("stderr")})
 
@@ -92,7 +120,10 @@ def swipe():
     try:
         pts = data["points"]                    # [[x,y],[x,y]] browser coords
         dims = data["view"]                     # {w,h} of the displayed img
-        duration_ms = int(int(data.get("ms", 300)))
+        duration_ms = _int_or_none(data.get("ms", 300))
+        if duration_ms is None:
+            return jsonify({"success": False, "error": "Format de swipe invalide"}), 400
+        duration_ms = _clamp_duration(duration_ms)
         if len(pts) != 2:
             return jsonify({"success": False, "error": "exactement deux points"}), 400
         vw, vh = int(dims["w"]), int(dims["h"])
@@ -107,13 +138,16 @@ def swipe():
             dw, dh = int(m.group(1)), int(m.group(2))
             sx, sy = dw / vw, dh / vh
         cmd_pts = (
-            f"{int(x1 * sx)} {int(y1 * sy)} {int(x2 * sx)} {int(y2 * sy)}"
-            if sx else f"{int(x1)} {int(y1)} {int(x2)} {int(y2)}"
+            f"{_clamp_coord(x1 * sx)} {_clamp_coord(y1 * sy)} "
+            f"{_clamp_coord(x2 * sx)} {_clamp_coord(y2 * sy)}"
+            if sx else (f"{_clamp_coord(x1)} {_clamp_coord(y1)} "
+                        f"{_clamp_coord(x2)} {_clamp_coord(y2)}")
         )
         res = engine.shell(f"input swipe {cmd_pts} {duration_ms}", serial=serial, timeout=12)
         return jsonify({"success": res["success"], "scale_applied": bool(sx), "stderr": res.get("stderr")})
     except (KeyError, TypeError, ValueError) as e:
-        return jsonify({"success": False, "error": f"Format de swipe invalide: {e}"}), 400
+        log.debug("swipe invalide: %s", e)
+        return jsonify({"success": False, "error": "Format de swipe invalide"}), 400
 
 
 @screen_bp.route("/size")
@@ -133,6 +167,8 @@ def text():
     payload = data.get("text") or ""
     if not payload:
         return jsonify({"success": False, "error": "texte vide"}), 400
+    if len(payload) > 2000:
+        return jsonify({"success": False, "error": "texte trop long (2000 caractères max)"}), 400
     import shlex as _shlex
     safe = _shlex.quote(payload.replace(" ", "%s"))   # input text space quirk
     res = engine.shell(f"input text {safe}", serial=serial, timeout=12)
@@ -162,6 +198,7 @@ class H264CastSession:
     def __init__(self):
         self._proc = None
         self._thread = None
+        self._pump_stale = False   # set when stop() outlives the pump join
         self._lock = threading.Lock()
         self._splitter = None
         self._ring = bytearray()
@@ -171,6 +208,9 @@ class H264CastSession:
 
     def start(self, serial=None, bitrate=None, max_width=None):
         with self._lock:
+            if self._pump_stale:
+                return {"success": False,
+                        "error": "cast pump still draining — retry shortly"}
             if self._proc and self._proc.poll() is None:
                 return {"success": False, "error": "cast already running",
                         **self._snapshot_locked()}
@@ -213,12 +253,13 @@ class H264CastSession:
 
     def _pump(self):
         proc = self._proc
+        splitter = self._splitter   # local ref: start() swaps self._splitter under the lock
         try:
             while True:
                 chunk = proc.stdout.read1(65536)
                 if not chunk:
                     break
-                nals = self._splitter.feed(chunk)
+                nals = splitter.feed(chunk)
                 with self._lock:
                     self._stat["bytes"] += len(chunk)
                     self._ring.extend(chunk)
@@ -249,7 +290,10 @@ class H264CastSession:
             except OSError:
                 pass
             if proc.poll() is None:
-                proc.terminate()
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
             with self._lock:
                 # exit code 0 = clean stop or the 180 s device cap;
                 # anything else is a real fault worth naming
@@ -257,22 +301,36 @@ class H264CastSession:
                 if self._stat["running"] and rc not in (0, None):
                     self._stat["error"] = f"encoder exited rc={rc}"
                 self._stat["running"] = False
+                self._pump_stale = False   # pump drained — re-arm allowed again
 
     def stop(self):
         with self._lock:
             proc = self._proc
+            thread = self._thread
             if not proc or proc.poll() is not None:
                 self._stat["running"] = False
+                self._stat["error"] = None
                 return {"success": True, "was_running": False,
                         **self._snapshot_locked()}
-        proc.terminate()
+        try:
+            proc.terminate()
+        except OSError:
+            pass
         try:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            proc.kill()
-        self._thread.join(timeout=3)
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        if thread:
+            thread.join(timeout=3)
         with self._lock:
+            if thread and thread.is_alive():
+                # pump wedged in read1 — refuse re-start until it drains
+                self._pump_stale = True
             self._stat["running"] = False
+            self._stat["error"] = None
             return {"success": True, "was_running": True,
                     **self._snapshot_locked()}
 

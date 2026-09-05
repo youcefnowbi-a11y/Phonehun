@@ -48,6 +48,8 @@ class ADBEngine:
                 "stderr": res.stderr.decode("utf-8", errors="replace"),
                 "returncode": res.returncode
             }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "stdout": b"", "stderr": "Command timed out", "returncode": -1}
         except Exception as e:
             return {"success": False, "stdout": b"", "stderr": str(e), "returncode": -1}
 

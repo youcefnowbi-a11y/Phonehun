@@ -67,6 +67,10 @@ def rssi_to_distance(rssi_dbm: float, freq_mhz: float = 2437.0,
                      p_tx_dbm: float = DEFAULT_P_TX_DBM,
                      n: float = DEFAULT_N_INDOOR) -> float:
     """Log-distance model inversion: meters from a single RSSI sample."""
+    # M23: un RSSI NaN/inf propageait du garbage silencieux (repli 0.5 m) —
+    # entrée non finie refusée bruyamment
+    if not isinstance(rssi_dbm, (int, float)) or not math.isfinite(rssi_dbm):
+        raise ValueError(f"rssi_dbm non fini: {rssi_dbm!r}")
     head = p_tx_dbm - fspl_1m(freq_mhz) - rssi_dbm
     d = 10.0 ** (head / (10.0 * n))
     return max(0.5, min(d, 500.0))   # physical sanity clamp
@@ -93,7 +97,9 @@ def haversine_m(lat1, lon1, lat2, lon2) -> float:
     dp = math.radians(lat2 - lat1)
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+    # M24: l'erreur float peut dépasser 1.0 d'un cheveu près de l'antipode
+    # → erreur de domaine asin
+    return 2 * r * math.asin(math.sqrt(min(1.0, a)))
 
 
 def to_enu(anchors, lat0=None, lon0=None):
@@ -134,7 +140,13 @@ def power_centroid_enu(points) -> tuple:
     points: [(e, n, anchor_dict)]"""
     num_e = num_n = den = 0.0
     for e, n, a in points:
-        w = 10.0 ** (a["rssi_dbm"] / 10.0)
+        rssi = a["rssi_dbm"]
+        # M25: un RSSI non fini fabriquait un centroïde (nan, nan) silencieux
+        # (nan <= 0 est faux → le garde den ne voyait rien) — ancre écartée
+        if isinstance(rssi, bool) or not isinstance(rssi, (int, float)) \
+                or not math.isfinite(rssi):
+            continue
+        w = 10.0 ** (rssi / 10.0)
         num_e += w * e
         num_n += w * n
         den += w
@@ -213,6 +225,19 @@ def fuse_position(resolved_aps, gps_last_known=None):
       0 anchors    -> last-known GPS or nothing
     """
     out = {"method": "none", "anchors_used": len(resolved_aps)}
+    # L81: clés manquantes/non numériques explosaient en KeyError profond —
+    # valider la surface publique ici, refus propre
+    for a in resolved_aps:
+        if not isinstance(a, dict):
+            out.update(method="invalid-anchor", error="ancre non-dict")
+            return out
+        for k in ("lat", "lon", "rssi_dbm"):
+            v = a.get(k)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) \
+                    or not math.isfinite(v):
+                out.update(method="invalid-anchor",
+                           error=f"ancre invalide ({k!r})")
+                return out
     if not resolved_aps:
         if gps_last_known:
             out.update(method="gps-last-known", lat=gps_last_known.get("lat"),
@@ -244,6 +269,13 @@ def fuse_position(resolved_aps, gps_last_known=None):
                        lat=round(lat, 6), lon=round(lon, 6),
                        note="anchors near-collinear — LS singular, centroid fallback")
             return out
+        # M26: 3+ ancres, les deux solveurs inutilisables — l'ancien
+        # fall-through atteignait la branche single-anchor et étiquetait
+        # faux. Refus honnête, aucun point inventé.
+        out.update(method="degenerate-anchors",
+                   note="3+ ancres mais LS singulier et centroïde inutilisable — "
+                        "aucun fix inventé")
+        return out
 
     if len(pts) == 2:
         (e0, n0, a0), (e1, n1, a1) = pts
@@ -270,7 +302,7 @@ def fuse_position(resolved_aps, gps_last_known=None):
     a = resolved_aps[0]
     r = rssi_to_distance(a["rssi_dbm"], a.get("freq_mhz", 2437.0))
     out.update(method="single-anchor-range-circle",
-               lat=a["lat"], lon=a["lon"], radius_m=round(r, 1),
+               lat=round(a["lat"], 6), lon=round(a["lon"], 6), radius_m=round(r, 1),
                note="one anchor only — the phone is somewhere on this circle")
     return out
 
@@ -281,13 +313,15 @@ def fuse_position(resolved_aps, gps_last_known=None):
 
 def timing_advance_meters(radio: str, ta: int):
     """Distance bound from cell timing advance. GSM 553.5 m/TA, LTE 78.1 m/TA."""
-    if ta is None or ta < 0:
+    # L81: ta non numérique → TypeError; L83: bornes spec (GSM 0-63,
+    # LTE ~0-1282) — un ta=10**6 ne fabrique plus une distance absurde
+    if isinstance(ta, bool) or not isinstance(ta, (int, float)) or ta < 0:
         return None
     r = (radio or "").lower()
     if "gsm" in r or r == "2g":
-        return round(ta * 553.5, 1)
+        return round(min(ta, 63) * 553.5, 1)
     if "lte" in r or r == "4g":
-        return round(ta * 78.1, 1)
+        return round(min(ta, 1282) * 78.1, 1)
     return None   # NR TA semantics differ; refuse to guess
 
 
@@ -320,8 +354,6 @@ def selftest() -> int:
 
     # trilateration: synthesize a phone at (10, 20) m from three anchors
     # around origin; read the RSSI the model predicts; solve back.
-    import random
-    random.seed(7)
     truth = (10.0, 20.0)
     pts = []
     for (e, n) in ((0, 0), (30, 5), (8, 35), (40, 30)):
@@ -331,7 +363,8 @@ def selftest() -> int:
     sol = trilaterate_ls(pts)
     check("trilateration recovers (10,20)", sol is not None
           and abs(sol[0] - 10.0) < 0.5 and abs(sol[1] - 20.0) < 0.5)
-    print(f"     solved: ({sol[0]:.3f}, {sol[1]:.3f}) rms={sol[2]:.4f} m")
+    if sol is not None:   # L82: une régression ne doit pas crasher le selftest
+        print(f"     solved: ({sol[0]:.3f}, {sol[1]:.3f}) rms={sol[2]:.4f} m")
 
     # degenerate: three collinear anchors -> LS must refuse
     coll = [(0, 0, {"rssi_dbm": -50}), (10, 0, {"rssi_dbm": -50}), (20, 0, {"rssi_dbm": -50})]

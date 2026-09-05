@@ -47,6 +47,7 @@ import datetime
 
 ADB_VERSION    = 0x01000001
 ADB_MAXDATA    = 256 * 1024
+RUN_MAX_BYTES  = 64 * 1024 * 1024   # M56: per-command output ceiling
 ADB_BANNER     = b"host::features=shell_v2,cmd,stat_v2,ls_v2,fixed_push_mkdir,apex,abb,fixed_push_symlink_timestamp,abb_exec,remount_shell,track_app,sendrecv_v2,sendrecv_v2_brotli,sendrecv_v2_lz4,sendrecv_v2_zstd,sendrecv_v2_dry_run_send,openscreen_mdns,delayed_ack"
 
 DELAYED_ACK_WINDOW = 32 * 1024 * 1024  # 32 MB initial receive window
@@ -85,6 +86,10 @@ def recv_packet(sock):
     """Read one ADB packet. Returns (cmd, arg0, arg1, data)."""
     header = _recv_exact(sock, 24)
     cmd, arg0, arg1, length, csum, magic = unpack_header(header)
+    if length > ADB_MAXDATA:
+        # M3: the header length is attacker-controlled — without this cap a
+        # hostile device forces _recv_exact into a huge allocation/hang
+        raise ValueError(f"packet length {length} exceeds ADB_MAXDATA ({ADB_MAXDATA})")
     data = _recv_exact(sock, length) if length else b""
     return cmd, arg0, arg1, data
 
@@ -223,14 +228,16 @@ class ADBBypass:
         """Wrap TCP socket in TLS with the non-RSA client cert."""
         self._log(f"upgrading to TLS {tls_version} with {key_type.upper()} client certificate")
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pem") as cf:
-            cf.write(cert_pem)
-            cert_path = cf.name
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pem") as kf:
-            kf.write(key_pem)
-            key_path = kf.name
-
+        cert_path = key_path = None
         try:
+            # L119: both writes now inside the try — the old layout orphaned
+            # tempfile① if anything failed between the two writes
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pem") as cf:
+                cf.write(cert_pem)
+                cert_path = cf.name
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pem") as kf:
+                kf.write(key_pem)
+                key_path = kf.name
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname = False
             ctx.verify_mode    = ssl.CERT_NONE
@@ -248,8 +255,10 @@ class ADBBypass:
             self._log(f"TLS handshake complete: {self.tls.version()}, cipher={self.tls.cipher()}")
             time.sleep(0.2)
         finally:
-            os.unlink(cert_path)
-            os.unlink(key_path)
+            if cert_path:
+                os.unlink(cert_path)
+            if key_path:
+                os.unlink(key_path)
 
     # ── Phase 3: post-TLS ADB service layer ──────────────────────────────
 
@@ -282,7 +291,9 @@ class ADBBypass:
             except (socket.timeout, OSError):
                 break
             finally:
-                self.tls.settimeout(None)
+                # M55: was settimeout(None) — that restored BLOCKING mode and
+                # defeated the 15s post-handshake cap; restore the cap
+                self.tls.settimeout(15)
 
     def _recv_skip_stls(self):
         """Receive next packet, silently skipping STLS notifications."""
@@ -325,9 +336,15 @@ class ADBBypass:
         self._send(self.tls, pack_packet(CMD_OKAY, self._local_id, remote))
 
         output = io.BytesIO()
-        while True:
+        total = 0
+        # M56: hostile target could stream WRTE forever — bound the loop and
+        # the accumulator instead of trusting CMD_CLSE to arrive
+        for _ in range(10_000):
             cmd_r, arg0, arg1, data = recv_packet(self.tls)
             if cmd_r == CMD_WRTE:
+                total += len(data)
+                if total > RUN_MAX_BYTES:
+                    raise RuntimeError(f"run_command: output exceeds {RUN_MAX_BYTES} byte cap")
                 output.write(data)
                 self._send(self.tls, pack_packet(CMD_OKAY, self._local_id, remote))
             elif cmd_r == CMD_CLSE:
@@ -336,6 +353,8 @@ class ADBBypass:
                 continue
             else:
                 break
+        else:
+            raise RuntimeError("run_command: stream never closed (10_000 packet cap)")
         return output.getvalue().decode(errors="replace")
 
     def interactive_shell(self):

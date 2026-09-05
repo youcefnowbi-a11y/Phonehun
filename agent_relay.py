@@ -11,6 +11,11 @@ The relay is a *pump*, not a brain:
     matched by envelope id
   - agent-initiated events (notifications, audit text, mic chunks) queue
     per session; mic PCM appends to a file you can pull any time
+
+  Trust model (H2/L3): the TCP port is LAN-only by design — any host that
+  reaches it and speaks the agent protocol registers a session; full auth
+  would require a protocol change on the phone agent (out of scope here).
+  The panel-facing HTTP routes are gated app-wide by app.py's token gate.
 """
 
 import os
@@ -113,6 +118,14 @@ def _handle(conn, addr):
                .replace(" ", ""))[:28]
         # avoid collision on reconnect of same device — replace old session
         with SESSIONS_LOCK:
+            old = SESSIONS.get(sid)
+            if old is not None and old.conn is not conn:
+                # H2: replacing without closing leaked the old fd and left a
+                # dead pump parked on it — close it; its thread self-cleans
+                try:
+                    old.conn.close()
+                except OSError:
+                    pass
             SESSIONS[sid] = Session(sid, conn, addr, hello)
         log.info("agent connected: %s from %s (%s)", sid, addr[0],
                  hello.get("android", "?"))
@@ -138,6 +151,10 @@ def _pump(sid, conn):
         # ---- binary follow-ups --------------------------------------
         raw_bytes = None
         raw_size = frame.get("size")
+        # H3: the raw follow-up path had NO cap — a LAN peer could announce
+        # a huge size and force the read (DoS). 16 MB, the codebase standard
+        if isinstance(raw_size, int) and (raw_size <= 0 or raw_size > 16 * 1024 * 1024):
+            raise ConnectionError(f"raw size rejected: {raw_size}")
         if op == "mic.data" and isinstance(raw_size, int):
             raw_bytes = _read_raw(conn, raw_size)
             _append_pcm(sid, raw_bytes)
@@ -168,6 +185,11 @@ def _append_pcm(sid, chunk):
         s = SESSIONS.get(sid)
     if s:
         try:
+            # M1: cap the capture file — a long session must not eat the disk
+            if os.path.exists(s.pcm_path) \
+                    and os.path.getsize(s.pcm_path) >= 50 * 1024 * 1024:
+                log.debug("pcm cap reached for %s", sid)
+                return
             with open(s.pcm_path, "ab") as f:
                 f.write(chunk)
         except OSError as exc:

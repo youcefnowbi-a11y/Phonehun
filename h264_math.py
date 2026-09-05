@@ -223,6 +223,11 @@ _py_split_nals = split_nals
 _py_is_keyframe = is_keyframe
 
 
+# M64: splitter accumulation cap — mirrors the demuxer's MAX_SANE_FRAME;
+# a river with no further start code must not accumulate forever
+_MAX_SPLIT_BUF = 16 * 1024 * 1024
+
+
 class AnnexBStreamSplitter:
     """Incremental Annex-B NAL splitter for raw rivers (screenrecord mode).
 
@@ -275,6 +280,11 @@ class AnnexBStreamSplitter:
             del self._buf[:positions[-1] + 3]
         elif not final:
             if self._pending:
+                # M64: payload accumulating with no further start code —
+                # cap the buffer (device-controlled OOM otherwise)
+                if len(b) > _MAX_SPLIT_BUF:
+                    raise ValueError("annex-b splitter buffer overflow "
+                                     f"({len(b)} bytes without start code)")
                 pass                    # payload accumulating; keep ALL of it
             elif n > 2:
                 del self._buf[:n - 2]   # pre-first-code: keep possible torn code
@@ -407,7 +417,9 @@ def _skip_scaling_list(r: BitReader, size: int):
 def _skip_hrd(r: BitReader):
     r.ue()                                    # cpb_cnt_minus1
     r.u(4); r.u(4)                            # bit_rate_scale, cpb_size_scale
-    for _ in range(r.ue() + 1):               # hmm: uses cpb_cnt already read
+    # M66: this second ue is NOT cpb_cnt (comment lie removed) — clamp the
+    # no-op loop: a crafted VUI HRD must not spin ~2^32 iterations
+    for _ in range(min(r.ue() + 1, 32)):
         pass
     # honest note: full VUI HRD walking is only needed for streams that
     # carry it; phone encoders (c2.qti/c2.android) rarely do. If a real
@@ -491,8 +503,14 @@ def make_sps(width: int, height: int, fps=None, profile_idc=100, level_idc=41,
     h_map = (height + 15) // 16
     crop_r = (w_mbs * 16 - width) // crop_x if crop_x else 0
     crop_b = (h_map * 16 - height) // crop_y if crop_y else 0
-    assert (w_mbs * 16 - width) % crop_x == 0, "width not expressible in crop units"
-    assert (h_map * 16 - height) % crop_y == 0, "height not expressible in crop units"
+    # L134: real checks — asserts vanish under `python -O`, and a zero
+    # crop unit must never reach the modulo
+    rem_w = (w_mbs * 16 - width) % crop_x if crop_x else 0
+    rem_h = (h_map * 16 - height) % crop_y if crop_y else 0
+    if rem_w or rem_h:
+        raise ValueError(
+            f"geometry not expressible in crop units: "
+            f"{width}x{height} (rem w/h = {rem_w}/{rem_h})")
 
     w = BitWriter()
     w.u(profile_idc, 8)
@@ -713,7 +731,50 @@ if os.environ.get("DROID_H264_PURE") != "1":
                 def flush(self):
                     return self._s.flush()
 
-            _RUST_HEART = True
+            def _m65_differential():
+                """M65: cheap startup self-differential — a stale/divergent
+                graft must never produce silently wrong NALs. Disagreement
+                with the pure oracle on the probe corpus refuses the graft."""
+                try:
+                    frames = [
+                        b"",
+                        b"\x00\x00\x01",
+                        b"\x00\x00\x00\x01\x67",
+                        b"\x00\x00\x01\x67\x64\x00\x1f\xac",
+                        b"\x00\x00\x00\x01\x68\xec\x32\x22",
+                        b"\x00\x00\x01\x65\x88\x84\x21\xa0" + bytes(range(256)) * 2,
+                        b"\x00\x00\x01\x41\x9a" + b"\x00\x00\x03\x00" * 8 + b"\x80",
+                        b"\x00\x00\x01\x06\x05\x01\xff" + b"\x00\x00\x00\x01\x41\xde",
+                    ]
+                    for f in frames:
+                        if list(_py_split_nals(f)) != list(split_nals(f)):
+                            return False
+                        if _py_is_keyframe(f) != is_keyframe(f):
+                            return False
+                    probe = bytes(range(256)) * 4
+                    if (_py_add_emulation_prevention(
+                            _py_remove_emulation_prevention(probe))
+                            != add_emulation_prevention(
+                                remove_emulation_prevention(probe))):
+                        return False
+                    payload = bytes(range(64))
+                    if (_py_H264FrameDemuxer.pack_frame(7, payload)
+                            != H264FrameDemuxer.pack_frame(7, payload)):
+                        return False
+                    return True
+                except Exception:
+                    return False
+
+            if _m65_differential():
+                _RUST_HEART = True
+            else:
+                # M65: divergent graft refused — the pure oracle stays bound
+                split_nals = _py_split_nals
+                is_keyframe = _py_is_keyframe
+                remove_emulation_prevention = _py_remove_emulation_prevention
+                add_emulation_prevention = _py_add_emulation_prevention
+                H264FrameDemuxer = _py_H264FrameDemuxer
+                AnnexBStreamSplitter = _py_AnnexBStreamSplitter
     except ImportError:
         _RUST_HEART = False
 

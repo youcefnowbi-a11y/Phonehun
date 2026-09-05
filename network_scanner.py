@@ -207,6 +207,7 @@ def scan_subnet(subnet_prefix, ports=None, max_workers=50, timeout=0.8):
         ports = QUICK_PORTS
 
     all_results = []
+    scan_errors = []
 
     def _scan_ip(ip):
         found = []
@@ -229,8 +230,11 @@ def scan_subnet(subnet_prefix, ports=None, max_workers=50, timeout=0.8):
             try:
                 results = future.result()
                 all_results.extend(results)
-            except Exception:
-                pass
+            except Exception as e:
+                scan_errors.append({"ip": futures[future], "error": str(e)})
+
+    if scan_errors:
+        print(f"[network_scanner] {len(scan_errors)} scan error(s): {scan_errors[:5]}")
 
     return all_results
 

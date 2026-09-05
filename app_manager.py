@@ -27,6 +27,8 @@ class AppManager:
                 continue
             
             content = line[len("package:"):]
+            if not content.startswith("/"):
+                continue
             if "=" in content:
                 apk_path, pkg_name = content.rsplit("=", 1)
                 is_system = apk_path.startswith("/system") or apk_path.startswith("/product") or apk_path.startswith("/vendor")
@@ -82,7 +84,15 @@ class AppManager:
         return details
 
     def install_apk(self, local_apk_path):
-        res = self.adb.run_cmd(["install", "-r", str(local_apk_path)], timeout=180)
+        # APK installs come from the panel's upload convention: files under TEMP_DIR.
+        apk = Path(local_apk_path).resolve()
+        try:
+            apk.relative_to(TEMP_DIR.resolve())
+        except ValueError:
+            return {"success": False, "stdout": "", "error": "APK path outside temp dir"}
+        if not apk.is_file():
+            return {"success": False, "stdout": "", "error": "APK file not found"}
+        res = self.adb.run_cmd(["install", "-r", str(apk)], timeout=180)
         # BUG 21 FIX: Use one consistent success check
         ok = "Success" in res["stdout"]
         return {
@@ -121,6 +131,8 @@ class AppManager:
         return {"success": res["success"]}
 
     def extract_apk(self, package_name):
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", package_name):
+            return {"success": False, "error": "Invalid package name"}
         safe_pkg = shlex.quote(package_name)
         res = self.adb.shell(f"pm path {safe_pkg}")
         if not res["success"] or not res["stdout"]:
@@ -128,7 +140,9 @@ class AppManager:
 
         apk_line = res["stdout"].splitlines()[0]
         remote_apk = apk_line.replace("package:", "").strip()
-        
+        if not (remote_apk.startswith("/") and ".." not in remote_apk.split("/")):
+            return {"success": False, "error": "Invalid APK path reported by device"}
+
         local_dest = TEMP_DIR / f"{package_name}.apk"
         pull_res = self.adb.run_cmd(["pull", remote_apk, str(local_dest)], timeout=120)
         return {

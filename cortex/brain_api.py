@@ -33,7 +33,6 @@ def brain_config_get():
         "temperature": cfg.get("temperature"),
         "persona_name": cfg.get("persona_name"),
         "has_key": bool(key),
-        "key_tail": key[-4:] if key else "",
     })
 
 
@@ -112,7 +111,10 @@ def brain_memory():
     skills_dir = cortex_dir / "skills"
 
     if section in ("casefile", "lessons", "identity"):
-        p = mem_dir / f"{section}.md"
+        p = (mem_dir / f"{section}.md").resolve()
+        # Defense-in-depth: allowlisted section must resolve inside mem_dir.
+        if p.parent != mem_dir.resolve():
+            return jsonify({"success": False, "error": "Invalid memory section"}), 404
         content = p.read_text(encoding="utf-8", errors="replace") if p.exists() else f"# {section.upper()}\nNo {section} entries recorded yet."
         return jsonify({"success": True, "section": section, "content": content})
     elif section == "skills":
@@ -121,7 +123,9 @@ def brain_memory():
             for f in sorted(skills_dir.glob("*.py")):
                 if f.name.startswith("__"):
                     continue
-                first_lines = "\n".join(f.read_text(encoding="utf-8", errors="replace").splitlines()[:6])
+                with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                    # Cap the preview read at 4 KB — don't slurp huge skill files.
+                    first_lines = "\n".join(fh.read(4096).splitlines()[:6])
                 skills_text.append(f"### {f.stem}\n```python\n{first_lines}\n```")
         content = "\n\n".join(skills_text) if len(skills_text) > 1 else "No custom skills compiled yet."
         return jsonify({"success": True, "section": section, "content": content})

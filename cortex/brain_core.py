@@ -310,8 +310,27 @@ def _list_skills():
 def _save_skill(name, description, steps):
     if not name or not isinstance(steps, list) or not steps:
         return {"error": "need name + description + steps[] ({tool,args} or {sleep:ms})"}
+    # H7: validate every step BEFORE persisting — a saved skill must never
+    # become an injection chain replayed verbatim on run
+    allowed = set(_TOOL_MAP) if _TOOL_MAP else set()
+    for i, st in enumerate(steps):
+        if not isinstance(st, dict):
+            return {"error": f"step {i}: must be an object"}
+        if "sleep" in st:
+            if isinstance(st["sleep"], bool) or not isinstance(st["sleep"], (int, float)):
+                return {"error": f"step {i}: sleep must be a number (ms)"}
+            continue
+        tool = st.get("tool")
+        if tool not in allowed:
+            return {"error": f"step {i}: unknown tool {tool!r} (allowed: {len(allowed)})"}
+        if tool in ("host_shell", "run_skill"):
+            return {"error": f"step {i}: {tool} not allowed in skills (no shell, no chains)"}
+        if not isinstance(st.get("args") or {}, dict):
+            return {"error": f"step {i}: args must be an object"}
     SKILLS_DIR.mkdir(exist_ok=True)
-    safe = "".join(c for c in name if c.isalnum() or c in "-_").lower()
+    safe = _sanitize_skill_name(name)
+    if not safe:
+        return {"error": "nom de skill invalide après sanitize"}
     path = SKILLS_DIR / f"{safe}.json"
     path.write_text(json.dumps({"name": safe, "description": description or "",
                                 "steps": steps, "saved": time.strftime("%Y-%m-%d %H:%M")},
@@ -321,10 +340,15 @@ def _save_skill(name, description, steps):
 
 
 def _run_skill(name, args=None):
+    # H6: run-side interpolait le nom brut dans le chemin — traversal
+    # (`../../x` chargeait un JSON arbitraire). Même sanitize que save-side.
+    safe = _sanitize_skill_name(name)
+    if not safe:
+        return {"error": "nom de skill invalide (alnum, - et _ seulement)"}
     SKILLS_DIR.mkdir(exist_ok=True)
-    path = SKILLS_DIR / f"{str(name or '').lower()}.json"
+    path = SKILLS_DIR / f"{safe}.json"
     if not path.exists():
-        return {"error": f"skill {name} not found", "available": _list_skills()["skills"]}
+        return {"error": f"skill {safe} not found", "available": _list_skills()["skills"]}
     try:
         d = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
@@ -338,6 +362,12 @@ def _run_skill(name, args=None):
         sargs = dict(step.get("args") or {})
         if args:
             sargs.update({k: v for k, v in args.items() if v is not None})
+        # H7: re-check at execution time — old skill files saved before the
+        # save-side whitelist existed must not replay forbidden tools
+        if tool in ("host_shell", "run_skill"):
+            results.append({"step": i, "tool": tool, "result": {"error": f"{tool} interdit dans les skills"}})
+            out.append(f"#{i} {tool} → refusé (whitelist H7)")
+            continue
         r = _exec_tool(tool, sargs)
         results.append({"step": i, "tool": tool, "result": r})
         out.append(f"#{i} {tool} → {_short(r, 200)}")
@@ -358,6 +388,12 @@ _HDR = {"id": re.compile(r"^#\s*doctrine:\s*(\S+)\s*$", re.M),
         "when": re.compile(r"^when:\s*(.+)$", re.M),
         "not_when": re.compile(r"^not_when:\s*(.+)$", re.M),
         "tier": re.compile(r"^tier:\s*(\S+)\s*$", re.M)}
+
+
+# H7: single sanitizer — names are constrained BEFORE any path or file op
+def _sanitize_skill_name(name):
+    safe = "".join(c for c in str(name or "") if c.isalnum() or c in "-_").lower()
+    return safe[:64]
 
 
 def _doctrine_parse(path):
@@ -750,7 +786,12 @@ def _ambient():
             parts.append(f"siege: {_short(keep, 140)}")
     except Exception:
         parts.append("siege: probe failed")
-    mem = " ".join(f"{sec}={(p.stat().st_size if p.exists() else 0)}ch" for sec, p in MEMORY_FILES.items())
+    def _sz(p):   # H9: exists()→stat() TOCTOU — the file can vanish between
+        try:      # the two calls; one OSError killed the whole worker
+            return p.stat().st_size
+        except OSError:
+            return 0
+    mem = " ".join(f"{sec}={_sz(p)}ch" for sec, p in MEMORY_FILES.items())
     parts.append(f"memory: {mem} | skills={_list_skills()['count']} | doctrines={len(_doctrine_list())}")
     return "AMBIENT STATE (live at turn start — verify, never assume): " + " | ".join(parts)
 
@@ -881,13 +922,18 @@ def start_task(objective):
     err = _gate(cfg)
     if err:
         return False, err
+    # H9: the int() parse ran AFTER state="running" — a bad config value
+    # raised before the thread started and the brain was wedged "running"
+    try:
+        max_steps_cfg = int(cfg.get("max_steps") or 40)
+    except (TypeError, ValueError):
+        max_steps_cfg = 40
     with _LOCK:
         BRAIN.update(state="running", mode="task", step=0, narration=[], final=None,
                      error=None, objective=objective, chat_last=None,
-                     started_at=time.strftime("%H:%M:%S"))
+                     started_at=time.strftime("%H:%M:%S"), max_steps=max_steps_cfg)
         BRAIN["stop"] = threading.Event()
         BRAIN["inbox"] = queue.Queue()
-    BRAIN["max_steps"] = int(cfg.get("max_steps") or 40)
     threading.Thread(target=_run, args=("task", objective), daemon=True).start()
     return True, "task armed — she is thinking"
 
@@ -958,38 +1004,51 @@ def _drain_inbox(narr, op_orders):
 
 
 def _run(mode, payload):
-    cfg = load_config()
-    name = cfg.get("persona_name") or "Vesper"
-    board = reliability_board()
-    sys = build_system_prompt(name, board)
-    whisper = _ambient()
-    _log(LOG_PATH, f"{mode.upper()}: {_short(payload, 200)} | {_short(whisper, 160)}")
-    base = len(CHAT_HISTORY) if mode == "chat" else 0
-    if mode == "task":
-        msgs = [{"role": "system", "content": sys},
-                {"role": "system", "content": whisper}]
-        doctrine_block = _doctrine_select(payload)
-        if doctrine_block:
-            msgs.append({"role": "system", "content": doctrine_block})
-            _log(LOG_PATH, f"[doctrine] {_short(doctrine_block, 120)}")
-        msgs.append({"role": "user", "content": payload})
-    else:
-        _log(CHAT_LOG, f"YOU: {payload}")
-        msgs = [{"role": "system", "content": sys},
-                {"role": "system", "content": whisper}] + list(CHAT_HISTORY) + \
-               [{"role": "user", "content": payload}]
-    BRAIN["msgs_out"] = msgs  # inbox drain target (thread-safe enough: single writer)
-    narr = BRAIN["narration"]
-    max_steps = int(cfg.get("max_chat_steps") or 20) if mode == "chat" else BRAIN["max_steps"]
-    budget = int(cfg.get("max_context_tokens") or 100000)
+    cfg, name, sys, whisper, base = None, "Vesper", "", "", 0
+    msgs = None
+    hist_ids = set()
     final, err = None, None
-    refusal_reframes = 0
-    refusal_wipes = 0
-    consec_llm_fail = 0
-    op_orders = []
-    step = 0
     aborted = False
     try:
+        # H9: the whole pre-flight used to run OUTSIDE the try — a stat()
+        # TOCTOU inside _ambient() or an unguarded int() on config killed
+        # the worker with BRAIN["state"] stuck "running" (permanent lockout)
+        cfg = load_config()
+        name = cfg.get("persona_name") or "Vesper"
+        board = reliability_board()
+        sys = build_system_prompt(name, board)
+        whisper = _ambient()
+        _log(LOG_PATH, f"{mode.upper()}: {_short(payload, 200)} | {_short(whisper, 160)}")
+        base = len(CHAT_HISTORY) if mode == "chat" else 0
+        if mode == "task":
+            msgs = [{"role": "system", "content": sys},
+                    {"role": "system", "content": whisper}]
+            doctrine_block = _doctrine_select(payload)
+            if doctrine_block:
+                msgs.append({"role": "system", "content": doctrine_block})
+                _log(LOG_PATH, f"[doctrine] {_short(doctrine_block, 120)}")
+            msgs.append({"role": "user", "content": payload})
+        else:
+            _log(CHAT_LOG, f"YOU: {payload}")
+            msgs = [{"role": "system", "content": sys},
+                    {"role": "system", "content": whisper}] + list(CHAT_HISTORY) + \
+                   [{"role": "user", "content": payload}]
+        hist_ids = {id(m) for m in CHAT_HISTORY}   # H8: identity set at build time
+        BRAIN["msgs_out"] = msgs  # inbox drain target (thread-safe enough: single writer)
+        narr = BRAIN["narration"]
+        try:
+            max_steps = int(cfg.get("max_chat_steps") or 20) if mode == "chat" else BRAIN["max_steps"]
+        except (TypeError, ValueError):
+            max_steps = 20 if mode == "chat" else BRAIN["max_steps"]
+        try:
+            budget = int(cfg.get("max_context_tokens") or 100000)
+        except (TypeError, ValueError):
+            budget = 100000
+        refusal_reframes = 0
+        refusal_wipes = 0
+        consec_llm_fail = 0
+        op_orders = []
+        step = 0
         while step < max_steps:
             # ── operator channel drains before every step ──
             sig = _drain_inbox(narr, op_orders)
@@ -1074,14 +1133,21 @@ def _run(mode, payload):
     if mode == "chat":
         with _LOCK:
             if final and is_refusal(final):
-                # a refusal never enters her memory — wipe clean, absorb
-                CHAT_HISTORY.clear()
-                BRAIN["chat_last"] = ("[provider refusal absorbed — memory wiped clean, "
+                # H8: one is_refusal false positive must not annihilate the
+                # whole history — bounded prune (system frames kept, last 20
+                # real turns survive) instead of CHAT_HISTORY.clear()
+                kept = [m for m in CHAT_HISTORY if m.get("role") != "system"][-20:]
+                CHAT_HISTORY[:] = kept
+                BRAIN["chat_last"] = ("[provider refusal absorbed — context pruned, "
                                       "reformule mon roi]")
-                _log(CHAT_LOG, "REFUSAL absorbed — chat memory wiped")
-            else:
-                # skip persona+whisper system frames when folding the turn
-                CHAT_HISTORY.extend(msgs[2 + base:])
+                _log(CHAT_LOG, "REFUSAL absorbed — bounded context prune (H8)")
+            elif isinstance(msgs, list):
+                # H8: the stale msgs[2+base:] slice corrupted/lost turns after
+                # a mid-run rebuild (reframe/wipe shifts every index) — fold
+                # by OBJECT IDENTITY: only the frames this turn created
+                new_turns = [m for m in msgs if m.get("role") != "system"
+                             and id(m) not in hist_ids]
+                CHAT_HISTORY.extend(new_turns)
                 if final:
                     BRAIN["chat_last"] = final
                 del CHAT_HISTORY[:-60]

@@ -1,6 +1,13 @@
 import re
 import datetime
 
+# Fields the consumers below actually read — only these act as key= boundaries,
+# so unknown 'foo=' sequences inside values (SMS bodies) stay part of the value.
+_KNOWN_FIELDS = frozenset({
+    "_id", "address", "body", "date", "type",
+    "display_name", "number", "name", "duration",
+})
+
 class CommsManager:
     def __init__(self, adb_engine):
         self.adb = adb_engine
@@ -33,8 +40,17 @@ class CommsManager:
 
             # Split by ', ' but be aware that values may contain commas.
             # Strategy: find all 'key=' boundaries, then extract values between them.
-            key_positions = [(m.start(), m.group(1)) for m in re.finditer(r'(?:^|,\s*)(\w+)=', line)]
-            
+            # Restrict boundaries to known field names — unknown 'foo=' stays in the value.
+            key_positions = [(m.start(), m.group(1)) for m in re.finditer(r'(?:^|,\s*)(\w+)=', line)
+                             if m.group(1) in _KNOWN_FIELDS]
+
+            if not key_positions:
+                # Multiline SMS bodies arrive as continuation lines — join them
+                # onto the previous record's body field.
+                if current_row and "body" in current_row:
+                    current_row["body"] += "\n" + line
+                continue
+
             for i, (pos, key) in enumerate(key_positions):
                 # Value starts after 'key='
                 val_start = pos + line[pos:].index('=') + 1

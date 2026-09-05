@@ -17,7 +17,9 @@ Every route returns per-action results with honest success flags.
 """
 
 import json
+import re
 import time
+import uuid
 import logging
 from pathlib import Path
 
@@ -52,6 +54,31 @@ def _shell(cmd, timeout=20):
     return engine.shell(cmd, timeout=timeout)
 
 
+# Whitelist validators (audit H10/H11): every caller-supplied identifier that
+# reaches a device command must match a strict grammar. Metacharacters are
+# rejected here so nothing downstream can chain device-side shell syntax.
+_COMPONENT_RE = re.compile(r"[A-Za-z][A-Za-z0-9._/]*(?:\$[A-Za-z0-9._]+)?")
+_PACKAGE_RE = re.compile(r"[A-Za-z][A-Za-z0-9._]+")
+
+
+def _valid_component(value):
+    """Dotted Android component: pkg[/class] optionally with $inner classes."""
+    return bool(_COMPONENT_RE.fullmatch(value or ""))
+
+
+def _valid_package(value):
+    return bool(_PACKAGE_RE.fullmatch(value or ""))
+
+
+def _valid_service_list(value):
+    """Accessibility/listener setting values are colon-separated components."""
+    parts = (value or "").split(":")
+    for part in parts:
+        if not _valid_component(part):
+            raise ValueError(f"composant invalide: {part!r}")
+    return ":".join(parts)
+
+
 # --------------------------------------------------------------------------
 # Snapshot: read everything we might mutate, before we mutate it
 # --------------------------------------------------------------------------
@@ -81,7 +108,7 @@ def snapshot_device():
             "installed": bool(res.get("stdout", "").startswith("package:")),
         }
     SNAPSHOT_DIR.mkdir(exist_ok=True)
-    fname = f"snap_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    fname = f"snap_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.json"
     path = SNAPSHOT_DIR / fname
     path.write_text(json.dumps(snap, indent=2), encoding="utf-8")
     return {"snapshot_file": fname, "snapshot": snap}
@@ -106,7 +133,7 @@ def route_list_snapshots():
 def _act_kill_verifier():
     results = []
     for ns, key, val in VERIFIER_SETTINGS:
-        res = _shell(f"settings put {ns} {key} {val}")
+        _shell(f"settings put {ns} {key} {val}")
         check = _read_setting(ns, key)
         ok = check["value"] == val          # verify-after-write, always
         results.append({"action": f"settings put {ns} {key} {val}",
@@ -138,6 +165,11 @@ def _act_strip_admins(components):
     """Remove device-admin rights (NOT owner/profile-owner protected ones)."""
     results = []
     for comp in components or []:
+        if not isinstance(comp, str) or not _valid_component(comp):
+            results.append({"action": "remove-active-admin (refusé)",
+                            "success": False,
+                            "error": "composant invalide"})
+            continue
         res = _shell(f"dpm remove-active-admin {comp}", timeout=20)
         remaining = _shell("dpm list-active-admins").get("stdout", "")
         gone = comp not in remaining
@@ -151,15 +183,18 @@ def _act_strip_admins(components):
 
 def _act_choke_daemon(pkg):
     """appops stranglehold: no background start, no foreground service."""
+    if not _valid_package(pkg):
+        raise ValueError("nom de package invalide")
     results = []
     for op in ("RUN_IN_BACKGROUND", "START_FOREGROUND"):
-        res = _shell(f"appops set {pkg} {op} deny", timeout=15)
+        _shell(f"appops set {pkg} {op} deny", timeout=15)
         chk = _shell(f"appops get {pkg} {op}")
         denied = "deny" in chk.get("stdout", "").lower()
         results.append({"action": f"appops set {pkg} {op} deny",
                         "success": denied, "verified": chk.get("stdout", "")})
     _shell(f"am force-stop {pkg}", timeout=10)
-    results.append({"action": f"force-stop {pkg}", "success": True})
+    results.append({"action": f"force-stop {pkg}",
+                    "success": _shell(f"pidof {pkg}").get("stdout", "").strip() == ""})
     return results
 
 
@@ -169,6 +204,10 @@ def _act_hijack_accessibility(our_component=None, listeners_component=None):
     WARNING (surfaced in UI too): this evicts EVERY other service's access —
     including banking-app tamper alarms. That's the point. Snapshot restores.
     """
+    if our_component:
+        _valid_service_list(our_component)      # lève ValueError si métacaractères
+    if listeners_component:
+        _valid_service_list(listeners_component)
     results = []
     if our_component:
         _shell(f"settings put secure enabled_accessibility_services {our_component}")
@@ -223,8 +262,9 @@ def neutralize():
         try:
             executed[name] = ACTIONS[name](data)
         except Exception as exc:
+            log.warning("action %s a échoué: %s", name, exc)
             executed[name] = [{"action": name, "success": False,
-                               "error": str(exc)}]
+                               "error": "erreur interne (voir logs)"}]
 
     all_ok = all(step.get("success")
                  for steps in executed.values() for step in steps)
@@ -248,15 +288,38 @@ def restore():
     if not path.exists():
         return jsonify({"success": False, "error": f"instantané introuvable: {safe}"}), 404
 
-    snap = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        snap = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return jsonify({"success": False,
+                        "error": "instantané illisible ou corrompu"}), 400
+
+    _VALID_NS = ("global", "secure", "system")
+    _KEY_RE = re.compile(r"[a-z0-9._]+")
     results = []
     for setting in snap.get("settings", []):
+        try:
+            ns, key = setting["namespace"], setting["key"]
+        except (KeyError, TypeError):
+            results.append({"restore": "?", "success": False,
+                            "error": "entrée d'instantané invalide"})
+            continue
+        if ns not in _VALID_NS or not _KEY_RE.fullmatch(key or ""):
+            results.append({"restore": f"{ns}/{key}", "success": False,
+                            "error": "espace de nom ou clé invalide"})
+            continue
         val = setting.get("value")
-        ns, key = setting["namespace"], setting["key"]
         if val is None:
             res = _shell(f"settings delete {ns} {key}")
-        else:
+        elif (isinstance(val, str) and val
+              and not any(c in val for c in '"\n\r$`\\')
+              and all(c.isprintable() for c in val)):
             res = _shell(f'settings put {ns} {key} "{val}"')
+        else:
+            results.append({"restore": f"{ns}/{key}", "to": val,
+                            "success": False,
+                            "error": "valeur ignorée (caractères interdits)"})
+            continue
         results.append({"restore": f"{ns}/{key}", "to": val,
                         "success": res["success"]})
     return jsonify({"success": all(r["success"] for r in results),

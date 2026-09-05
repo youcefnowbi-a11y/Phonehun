@@ -48,6 +48,12 @@ def send_sms(phone_number, message):
         if res["success"]:
             # Wait for SMS app to load, then simulate send button
             time.sleep(2)
+            # Baseline: which window holds focus before we touch anything
+            base_res = adb.shell("dumpsys window")
+            base_out = base_res.get("stdout") or ""
+            mbase = (re.search(r"mCurrentFocus=Window\{[^}]*\s([^ /\}]+)", base_out)
+                     or re.search(r"mCurrentFocus=(\S+)", base_out))
+            sms_focus = mbase.group(1) if mbase else None
             # Navigate to send button and press
             adb.shell("input keyevent 22")  # DPAD_RIGHT (focus send)
             time.sleep(0.3)
@@ -55,9 +61,22 @@ def send_sms(phone_number, message):
             time.sleep(0.3)
             adb.shell("input keyevent 66")  # ENTER (send)
             time.sleep(1)
+            # Post-keystroke focus check: the send is only credible if the
+            # focused window moved off the compose UI (exit_on_sent closes it)
+            post_res = adb.shell("dumpsys window")
+            post_out = post_res.get("stdout") or ""
+            mpost = (re.search(r"mCurrentFocus=Window\{[^}]*\s([^ /\}]+)", post_out)
+                     or re.search(r"mCurrentFocus=(\S+)", post_out))
+            observed_focus = mpost.group(1) if mpost else None
+            confirmed = bool(sms_focus) and observed_focus != sms_focus
             # Press back to close SMS app
             adb.shell("input keyevent 4")
-            return {"success": True, "method": "am_intent", "phone": phone, "message": msg_clean}
+            if confirmed:
+                return {"success": True, "method": "am_intent", "phone": phone,
+                        "message": msg_clean, "observed_focus": observed_focus}
+            return {"success": False, "method": "am_intent", "phone": phone,
+                    "message": msg_clean, "observed_focus": observed_focus,
+                    "error": "Fenêtre SMS non confirmée — envoi non vérifié"}
 
         # Method 2: via service call isms (direct, may need different arg index per Android version)
         safe_phone_arg = shlex.quote(phone)
@@ -122,6 +141,10 @@ def extract_app_data(package_name):
             "errors": []
         }
 
+        # Staging lives under /data/local/tmp (shell-writable, not on the
+        # shared sdcard); ensure the directory exists before copying.
+        adb.shell("mkdir -p /data/local/tmp")
+
         # Try listing databases via run-as
         db_res = adb.shell(f"run-as {package_name} ls databases/ 2>/dev/null")
         if db_res["success"] and db_res["stdout"]:
@@ -131,16 +154,21 @@ def extract_app_data(package_name):
             # Try to pull each database
             for db_file in db_files[:5]:  # Limit to 5 files
                 safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', db_file)
-                remote_tmp = f"/sdcard/.dc_exfil_{safe_name}"
+                remote_tmp = f"/data/local/tmp/droidcommand_{safe_name}"
                 local_path = str(TEMP_DIR / f"exfil_{package_name}_{safe_name}")
 
-                # Copy via run-as to sdcard, then pull
+                # Copy via run-as to staging, then pull
                 safe_db_rel = shlex.quote(f"databases/{db_file}")
                 safe_remote_tmp = shlex.quote(remote_tmp)
                 cp_res = adb.shell(f"run-as {package_name} cat {safe_db_rel} > {safe_remote_tmp}")
                 if cp_res["success"]:
-                    pull_res = adb.run_cmd(["pull", remote_tmp, local_path])
-                    adb.shell(f"rm {safe_remote_tmp}")
+                    try:
+                        pull_res = adb.run_cmd(["pull", remote_tmp, local_path])
+                    finally:
+                        try:
+                            adb.shell(f"rm {safe_remote_tmp}")
+                        except Exception:
+                            pass
                     if pull_res["success"]:
                         results["pulled_files"].append({
                             "name": db_file,
@@ -160,15 +188,20 @@ def extract_app_data(package_name):
 
             for sp_file in sp_files[:5]:
                 safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', sp_file)
-                remote_tmp = f"/sdcard/.dc_sp_{safe_name}"
+                remote_tmp = f"/data/local/tmp/droidcommand_{safe_name}"
                 local_path = str(TEMP_DIR / f"sp_{package_name}_{safe_name}")
 
                 safe_sp_rel = shlex.quote(f"shared_prefs/{sp_file}")
                 safe_remote_tmp = shlex.quote(remote_tmp)
                 cp_res = adb.shell(f"run-as {package_name} cat {safe_sp_rel} > {safe_remote_tmp}")
                 if cp_res["success"]:
-                    pull_res = adb.run_cmd(["pull", remote_tmp, local_path])
-                    adb.shell(f"rm {safe_remote_tmp}")
+                    try:
+                        pull_res = adb.run_cmd(["pull", remote_tmp, local_path])
+                    finally:
+                        try:
+                            adb.shell(f"rm {safe_remote_tmp}")
+                        except Exception:
+                            pass
                     if pull_res["success"]:
                         results["pulled_files"].append({
                             "name": sp_file,

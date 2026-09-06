@@ -1,0 +1,49 @@
+{
+  "name": "surface_census",
+  "description": "APEX_LANES T2: map every permission-less surface a locked bird exposes — kernel string + patch level, Samsung custom /dev drivers, USB stacks (adbd/mtp version), WiFi chip + wpa_supplicant, BT state + chip, boot mode, OTG/HID posture. Run BEFORE any gate attack: the census decides which lane class is alive on THIS build. All read-only.",
+  "steps": [
+    {
+      "tool": "shell",
+      "args": {
+        "command": "uname -a; cat /proc/version; getprop ro.build.version.release; getprop ro.build.version.security_patch; getprop ro.board.platform; getprop ro.kernel"
+      }
+    },
+    {
+      "tool": "shell",
+      "args": {
+        "command": "ls -la /dev/* 2>/dev/null | grep -iE 'mfc|smdk|exynos|ion|dma|v4l|s5p|fimg|gsc' | head -20; echo '---PROC DEVICES---'; cat /proc/devices | grep -iE 'mfc|s5p|exynos|samsung' | head -15"
+      }
+    },
+    {
+      "tool": "shell",
+      "args": {
+        "command": "getprop ro.build.fingerprint; getprop gsm.version.baseband; getprop init.svc.adbd; getprop persist.sys.usb.config"
+      }
+    },
+    {
+      "tool": "shell",
+      "args": {
+        "command": "dumpsys wifi 2>/dev/null | grep -iE 'chip|interface|mSupportedFeatures' | head -10; getprop ro.boot.wifichip 2>/dev/null; ls /sys/class/net/ 2>/dev/null"
+      }
+    },
+    {
+      "tool": "shell",
+      "args": {
+        "command": "dumpsys bluetooth_manager 2>/dev/null | grep -iE 'state|address|name' | head -8; settings get secure bluetooth_on 2>/dev/null; getprop ro.boot.btmac 2>/dev/null"
+      }
+    },
+    {
+      "tool": "shell",
+      "args": {
+        "command": "getprop ro.bootmode; getprop ro.boot.bootreason; dumpsys battery | grep -iE ' Charge|status' | head -4; getprop sys.usb.config; getprop sys.usb.state"
+      }
+    },
+    {
+      "tool": "shell",
+      "args": {
+        "command": "service list | grep -iE 'usb|mtp|hid|input' | head -12; dumpsys input 2>/dev/null | grep -iE 'hid|keyboard' | head -8"
+      }
+    }
+  ],
+  "saved": "2026-09-06 23:55"
+}

@@ -1,8 +1,8 @@
 // DroidCommand Service Worker
-// v21: static assets are NETWORK-FIRST with cache fallback (was cache-first:
-// a refresh served stale JS while "revalidating" — on a live LAN panel the
-// cockpit must always run today's code, the cache exists only for offline).
-const CACHE_NAME = 'vesper-v21';
+// v22: danger-gate sign-off panel added to the cockpit (VESPER v6 stage 1:
+// the operator's hands on the destructive/flash dispatch gate). Cache name
+// bumped so every client drops the v21 cache after this deploy.
+const CACHE_NAME = 'vesper-v22';
 const STATIC_ASSETS = [
   '/',
   '/warroom',

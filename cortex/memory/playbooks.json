@@ -1,3 +1,71 @@
 {
- "plays": []
+ "plays": [
+  {
+   "sig": "memory_read→memory_read→doctrine_list→read_manual→doctrine_read→page→page→page→page→page",
+   "mission": "Assimilation check, no devices needed: 1) doctrine_list — read the new interior_gates law. 2) Read your belt: you now carry v6 organs (intake_classify, state_sn",
+   "tags": [
+    "comms",
+    "recon",
+    "siege"
+   ],
+   "mode": "task",
+   "count": 1,
+   "ts": 1788714730.2960975
+  },
+  {
+   "sig": "memory_read→memory_read→memory_read→read_manual→list_devices",
+   "mission": "GATE-17.15 IS LIVE - THE INTERIOR. New era objective: find what has never been found. The bird (locked A21s, pattern + 3 enrolled prints, A12/OneUI4.1, serial R",
+   "tags": [
+    "apps",
+    "comms",
+    "deep",
+    "network",
+    "recon",
+    "siege"
+   ],
+   "mode": "task",
+   "count": 1,
+   "ts": 1788654410.5117874
+  },
+  {
+   "sig": "memory_read→memory_read→read_manual→list_devices→page→page→page→page→page→list_skills",
+   "mission": "Session resumed after cable drop. Your casefile and lessons carry the full harvest state: vesper_cam_b2.tar on the bird is sealed staging (32 files); the runawa",
+   "tags": [
+    "apps",
+    "comms",
+    "deep",
+    "files",
+    "network",
+    "recon"
+   ],
+   "mode": "task",
+   "count": 1,
+   "ts": 1788652285.997009
+  },
+  {
+   "sig": "memory_read→memory_read→read_manual→list_devices→device_info→device_props→screen_capture→shell→shell→shell",
+   "mission": "GATE-17.13 is law now: guessing is stone age — the gate is a STATE on disk, destroy it. Your siege proved OneUI eats injected touches, so the engineering path o",
+   "tags": [
+    "deep",
+    "network",
+    "recon",
+    "siege"
+   ],
+   "mode": "task",
+   "count": 1,
+   "ts": 1788650420.759395
+  },
+  {
+   "sig": "device_info→screen_capture→memory_read→memory_read→memory_read→list_devices→read_manual→list_skills→page→device_props",
+   "mission": "A new phone just appeared on this panel. You have never seen it. Do what you were built for.",
+   "tags": [
+    "apps",
+    "host",
+    "recon"
+   ],
+   "mode": "task",
+   "count": 1,
+   "ts": 1788649299.295269
+  }
+ ]
 }

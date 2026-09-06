@@ -1,20 +1,23 @@
-"""
-CORTEX :: brain_api.py — HTTP surface of the LLM brain (VESPER).
+﻿"""
+CORTEX :: brain_api.py â€” HTTP surface of the LLM brain (VESPER).
 
 /api/brain/config      GET/POST  provider, model, base_url, api_key, caps, persona_name
-/api/brain/task        POST      {"objective": "..."} — mission mode
+/api/brain/task        POST      {"objective": "..."} â€” mission mode
 /api/brain/chat        GET       conversation history with VESPER
-/api/brain/chat        POST      {"message": "..."} — chat mode (tools allowed)
+/api/brain/chat        POST      {"message": "..."} â€” chat mode (tools allowed)
 /api/brain/chat/clear  POST      wipe her memory
 /api/brain/status      GET       state, mode, step, narration, final, error
 /api/brain/stop        POST      stop signal
-/api/brain/say         POST      {"message": "..."} — whisper MID-mission into her
+/api/brain/say         POST      {"message": "..."} â€” whisper MID-mission into her
                                  inbox (drained next step) or start a chat when idle
 """
 
 from flask import Blueprint, jsonify, request
 
 from cortex import brain_core
+from cortex import registry as _registry   # v6 Stage 1: import at module level â€”
+# brain_core only lazy-imports it inside _exec_tool, so brain_core.registry
+# does not exist as an attribute and route handlers 500'd (bug caught by smoke).
 
 brain_bp = Blueprint("brain", __name__, url_prefix="/api/brain")
 
@@ -43,7 +46,7 @@ def brain_config_get():
 @brain_bp.route("/config", methods=["POST"])
 def brain_config_post():
     data = request.get_json(silent=True) or {}
-    # fix: reject non-dict bodies — save_config expects a mapping.
+    # fix: reject non-dict bodies â€” save_config expects a mapping.
     if not isinstance(data, dict):
         return jsonify({"success": False, "error": "JSON object required"}), 400
     try:
@@ -111,7 +114,7 @@ def brain_say():
     return jsonify({"success": ok, "message": resp}), (200 if ok else 409)
 
 
-# ── VESPER v6 STAGE 1 — registry danger gates + operator sign-off ────────────
+# â”€â”€ VESPER v6 STAGE 1 â€” registry danger gates + operator sign-off â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # The cortex's dispatch gate lives in cortex/registry.py; these routes are the
 # cockpit's hands on that gate. Destructive/flash calls park with a signoff_id;
 # the operator approves here and the retried call fires exactly once.
@@ -119,7 +122,7 @@ def brain_say():
 @brain_bp.route("/signoffs", methods=["GET"])
 def brain_signoffs():
     return jsonify({"success": True,
-                    "pending": brain_core.registry.pending_signoffs()})
+                    "pending": _registry.pending_signoffs()})
 
 
 @brain_bp.route("/signoff/approve", methods=["POST"])
@@ -128,7 +131,7 @@ def brain_signoff_approve():
     sid = (data.get("signoff_id") or "").strip()
     if not sid:
         return jsonify({"success": False, "error": "signoff_id required"}), 400
-    ok, msg = brain_core.registry.approve_signoff(sid)
+    ok, msg = _registry.approve_signoff(sid)
     return jsonify({"success": ok, "message": msg}), (200 if ok else 404)
 
 
@@ -138,13 +141,13 @@ def brain_signoff_decline():
     sid = (data.get("signoff_id") or "").strip()
     if not sid:
         return jsonify({"success": False, "error": "signoff_id required"}), 400
-    ok, msg = brain_core.registry.decline_signoff(sid)
+    ok, msg = _registry.decline_signoff(sid)
     return jsonify({"success": ok, "message": msg}), (200 if ok else 404)
 
 
 @brain_bp.route("/registry", methods=["GET"])
 def brain_registry():
-    reg = brain_core.registry.load_registry()
+    reg = _registry.load_registry()
     tools = [{"name": t.get("name"), "plane": t.get("plane"),
               "danger_class": t.get("danger_class"), "interface": t.get("interface")}
              for t in reg.get("tools", [])]
@@ -180,7 +183,7 @@ def brain_memory():
                 # fix: unreadable/ vanished skill file -> skip it, not a 500.
                 try:
                     with open(f, "r", encoding="utf-8", errors="replace") as fh:
-                        # Cap the preview read at 4 KB — don't slurp huge skill files.
+                        # Cap the preview read at 4 KB â€” don't slurp huge skill files.
                         first_lines = "\n".join(fh.read(4096).splitlines()[:6])
                 except OSError:
                     continue

@@ -8,6 +8,7 @@ skeleton_snapshots/
 _research/*.log
 _research/*.jpg
 _research/*.png
+_research/extracted_A217F/
 temp/
 
 # ── python cruft ──

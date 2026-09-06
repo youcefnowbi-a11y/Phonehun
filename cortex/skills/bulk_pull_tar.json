@@ -1,0 +1,38 @@
+{
+  "name": "bulk_pull_tar",
+  "description": "BULK PULL LAW v2 (device-side; panel verify stays manual): (1) build chunk list by NAME-EXCLUSION against banked manifest (grep -vxF -f banked_manifest ls_output); greedy pack <=150MB. (2) launch background tar + done flag: nohup sh -c 'tar -cf /sdcard/<chunk>.tar -C <dir> -T /data/local/tmp/<list> && touch /sdcard/<chunk>_done' &. (3) POLL for <chunk>_done; never pull before it. (4) download_file the tar, sequentially, one per turn. (5) MANUAL on panel after: tar -tf entry count + tar -xf extract exit + file/byte count; tar block padding makes bytes slightly under tar size = normal. (6) rm the tar from bird ONLY after clean extract (bird 97% full). (7) log coverage to casefile. Byte-exact transfer != archive integrity — extraction is the verdict.",
+  "steps": [
+    {
+      "args": {
+        "command": "cd <dir> && ls -1 | sort > /data/local/tmp/all_list; grep -vxF -f <banked_manifest> /data/local/tmp/all_list > /data/local/tmp/rest; greedy-pack <=150MB into /data/local/tmp/chunk_list; wc -l /data/local/tmp/chunk_list"
+      },
+      "tool": "shell"
+    },
+    {
+      "args": {
+        "command": "nohup sh -c 'tar -cf /sdcard/<chunk>.tar -C <dir> -T /data/local/tmp/chunk_list && touch /sdcard/<chunk>_done' >/dev/null 2>&1 & echo LAUNCHED"
+      },
+      "tool": "shell"
+    },
+    {
+      "args": {
+        "command": "ls -l /sdcard/<chunk>_done /sdcard/<chunk>.tar"
+      },
+      "tool": "shell"
+    },
+    {
+      "args": {
+        "path": "/sdcard/<chunk>.tar",
+        "serial": "R58N647SCPY"
+      },
+      "tool": "download_file"
+    },
+    {
+      "args": {
+        "command": "rm -f /sdcard/<chunk>.tar /sdcard/<chunk>_done; df -h /sdcard | tail -1"
+      },
+      "tool": "shell"
+    }
+  ],
+  "saved": "2026-09-06 02:32"
+}

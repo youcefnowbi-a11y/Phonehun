@@ -55,11 +55,106 @@ window.VesperCockpit = (function () {
     // v21 fix: no private 1.5s interval — app.js brainHeartbeat already owns
     // the status cadence (1.2s busy / 4s idle) and calls pollStatus(); two
     // pollers were double-fetching /api/brain/status every tick.
+    // v22: the danger gate + live belt count ride the same boot cadence.
+    pollSignoffs();
+    loadBeltCount();
   }
 
-  // 1. Poll Vesper Brain Status
+  // v22: the DANGER GATE panel — VESPER v6 Stage 1 gives every destructive/
+  // flash tool call a sign-off ID the operator must approve before dispatch.
+  // This is the cockpit's half of that handshake: poll /api/brain/signoffs,
+  // banner + APPROVE/DECLINE when a call parks. Time-critical (TTL 3600s but
+  // missions wait on this), so it rides the SAME heartbeat as pollStatus —
+  // no private timer (v21 fix discipline).
+  let lastSignoffIds = '';
+  let beltCount = null;
+
+  async function pollSignoffs() {
+    try {
+      const res = await api('/api/brain/signoffs');
+      const pending = (res && res.pending) || [];
+      renderSignoffBanner(pending);
+    } catch (e) { /* gate down ≠ gate open — quiet */ }
+  }
+
+  function renderSignoffBanner(pending) {
+    const banner = document.getElementById('dangerGateBanner');
+    if (!banner) return;
+    // Only actionable ones: awaiting-approval or already approved (she'll
+    // consume at retry — show it firing so the operator sees the effect).
+    const actionable = pending.filter(s => !s.consumed);
+    const ids = actionable.map(s => s.id).join(',');
+    const stateChanged = ids !== lastSignoffIds;
+    if (stateChanged) lastSignoffIds = ids;
+
+    if (actionable.length === 0) {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      return;
+    }
+
+    const rows = actionable.map(s => `
+      <div class="signoff-row" data-sid="${escapeHtml(s.id)}">
+        <span class="signoff-tool">⚡ ${escapeHtml(s.tool)}</span>
+        <span class="signoff-age">${s.age_s}s ago</span>
+        ${s.approved
+          ? '<span class="signoff-approved">APPROVED — FIRING ON RETRY</span>'
+          : `<button class="signoff-btn approve" onclick="VesperCockpit.approveSignoff('${escapeHtml(s.id)}')">APPROVE</button>
+             <button class="signoff-btn decline" onclick="VesperCockpit.declineSignoff('${escapeHtml(s.id)}')">DECLINE</button>`}
+      </div>`).join('');
+
+    banner.style.display = 'block';
+    banner.innerHTML = `
+      <div class="signoff-title">⚠ DANGER GATE — ${actionable.length} CALL(S) AWAITING YOUR HAND${actionable.length > 1 ? 'S' : ''}</div>
+      <div class="signoff-sub">Destructive/flash class parked at dispatch. Approve to let it fire once; decline to kill it. Unanswered parks expire in 1h.</div>
+      ${rows}`;
+  }
+
+  async function approveSignoff(sid) {
+    try {
+      const res = await api('/api/brain/signoff/approve', {
+        method: 'POST', body: JSON.stringify({ signoff_id: sid })
+      });
+      pushFlow(res.success ? 'HIT' : 'ALERT',
+        res.success ? `Sign-off ${sid} approved — the gated call fires on her retry.`
+                    : `Approve failed: ${res.message || res.error || 'unknown'}`);
+    } catch (e) { pushFlow('ALERT', `Approve error: ${e.message}`); }
+    pollSignoffs();
+  }
+
+  async function declineSignoff(sid) {
+    try {
+      const res = await api('/api/brain/signoff/decline', {
+        method: 'POST', body: JSON.stringify({ signoff_id: sid })
+      });
+      pushFlow(res.success ? 'STRIKE' : 'ALERT',
+        res.success ? `Sign-off ${sid} declined — the gated call will never fire.`
+                    : `Decline failed: ${res.message || res.error || 'unknown'}`);
+    } catch (e) { pushFlow('ALERT', `Decline error: ${e.message}`); }
+    pollSignoffs();
+  }
+
+  // v22: the belt reads its count from the LIVE registry route instead of a
+  // hardcoded "48" — the belt grew to 58 with v6 organs and the UI lied.
+  async function loadBeltCount() {
+    if (beltCount !== null) return;
+    try {
+      const res = await api('/api/brain/registry');
+      if (res && res.success && typeof res.count === 'number') {
+        beltCount = res.count;
+        const label = document.querySelector('[data-belt-label]');
+        if (label) label.textContent = `${beltCount}-Tool Belt`;
+        const ticker = document.getElementById('vesperActiveToolTicker');
+        if (ticker && !ticker.dataset.live) {
+          ticker.dataset.live = '1';
+          ticker.innerHTML = `<span style="color: var(--text-faint);">All ${beltCount} tools standby</span>`;
+        }
+      }
+    } catch (e) { /* keep the static fallback — never a dead UI */ }
+  }
   async function pollStatus() {
     const seq = ++statusSeq; // v21.1: newest poll wins
+    pollSignoffs(); // v22: the danger gate rides the same heartbeat
     try {
       const data = await api('/api/brain/status');
       updateStatusUi(data, seq);
@@ -502,24 +597,42 @@ window.VesperCockpit = (function () {
     }
   }
 
-  function renderToolsBelt() {
+  // v22: the belt renders from the LIVE registry (name + plane + danger class
+  // per row), not a hardcoded 8-tool sample — the v6 organs deserve their
+  // names on the wall. Cached per session; refresh button in the tab header.
+  async function renderToolsBelt() {
     const box = document.getElementById('consoleToolsView');
     if (!box) return;
-    box.innerHTML = `
-      <div style="font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--text-body); padding: 8px;">
-        <div style="font-weight: 700; color: var(--ember); margin-bottom: 8px;">BATTLE-PROVEN TOOLS (48-TOOL BELT):</div>
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-          <div class="stat-badge"><code>screen_capture</code> · READY</div>
-          <div class="stat-badge"><code>screen_tap</code> · READY</div>
-          <div class="stat-badge"><code>screen_text</code> · READY</div>
-          <div class="stat-badge"><code>read_sms</code> · READY</div>
-          <div class="stat-badge"><code>read_calls</code> · READY</div>
-          <div class="stat-badge"><code>shell</code> · ROOT</div>
-          <div class="stat-badge"><code>dumpsys</code> · READY</div>
-          <div class="stat-badge"><code>network_sweep</code> · READY</div>
-        </div>
-      </div>
-    `;
+    box.innerHTML = `<div style="padding: 12px; color: var(--text-faint); font-size: 11px;">Loading registry…</div>`;
+    try {
+      const res = await api('/api/brain/registry');
+      const tools = (res && res.tools) || [];
+      if (!tools.length) throw new Error('empty registry');
+      beltCount = tools.length;
+      const planes = {};
+      tools.forEach(t => { planes[t.plane] = (planes[t.plane] || 0) + 1; });
+      const dangerColors = { read_only: 'var(--emerald)', state_write: 'var(--amber)', destructive: 'var(--ember)', flash: 'var(--ember)' };
+      const rows = tools.map(t => `
+        <div class="tool-row" title="${escapeHtml((t.interface || '') + ' · ' + (t.danger_class || ''))}">
+          <code class="tool-name">${escapeHtml(t.name)}</code>
+          <span class="tool-plane">${escapeHtml(t.plane || '—')}</span>
+          <span class="tool-danger" style="color: ${dangerColors[t.danger_class] || 'var(--text-graphite)'}">● ${escapeHtml(t.danger_class || '—')}</span>
+        </div>`).join('');
+      const planeChips = Object.entries(planes).sort((a, b) => b[1] - a[1])
+        .map(([p, n]) => `<span class="plane-chip">${escapeHtml(p)} · ${n}</span>`).join('');
+      box.innerHTML = `
+        <div style="font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--text-body); padding: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+            <div style="font-weight: 700; color: var(--ember);">VESPER v6 REGISTRY — ${tools.length} TOOLS:</div>
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">${planeChips}</div>
+          </div>
+          <div class="tool-grid">${rows}</div>
+        </div>`;
+      const label = document.querySelector('[data-belt-label]');
+      if (label) label.textContent = `${tools.length}-Tool Belt`;
+    } catch (e) {
+      box.innerHTML = `<div style="padding: 12px; color: var(--text-faint); font-size: 11px;">Registry unreachable — belt unknown. Refresh the tab to retry.</div>`;
+    }
   }
 
   const COMMANDS = [
@@ -618,6 +731,8 @@ window.VesperCockpit = (function () {
     openCommandPalette,
     closeCommandPalette,
     filterCommandPalette,
-    pollStatus
+    pollStatus,
+    approveSignoff,   // v22: the operator's hands on the danger gate
+    declineSignoff
   };
 })();

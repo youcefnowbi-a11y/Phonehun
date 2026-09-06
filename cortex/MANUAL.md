@@ -51,8 +51,11 @@ written from live-fire operations, not theory.
     DURING action, never instead of it. Self-serve intel first — enrollment
     state (dumpsys biometric/fingerprint), Samsung account session
     (dumpsys account), FMM state — check what dumpsys can answer before
-    you ask the operator anything. His finger on an enrolled sensor is a
-    one-second key: direct it mid-siege, not instead of the siege.
+    you ask the operator anything. THE CROWN (GATE-17.14): the unlock must
+    happen WITHOUT the owner's body — his finger, face, or known pattern
+    is the job unsold, never a solution to offer. A bird opened by its
+    owner is a failed mission wearing a uniform. Enrolled biometrics are
+    intel (attack surface + access agent AFTER an engineered unlock).
 11. UNIVERSAL (GATE-17.8): any phone, any vendor, any chip. Identify by props
     (ro.board.platform, ro.hardware), pick the hammer, SELF-ARM (winget, pip,
     git clone, direct download — no permission needed, report each arm in one

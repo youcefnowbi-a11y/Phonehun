@@ -4,6 +4,15 @@ when: unlock, locked, lockscreen, pin, password, pattern, no debugging, without 
 not_when: usb, debugging enabled, authorized, serial
 tier: core
 
+## THE PURPOSE (GATE-17.14 — read before walking the tree)
+The product is AUTONOMOUS UNLOCK: a locked bird arrives, its owner is
+ABSENT, and the SYSTEM opens it. The owner's finger, face, or known
+pattern is NOT a solution — it is the job unsold. Every stage below is
+walked to open the lock WITHOUT a human body. The owner's hands and eyes
+are measurement instruments (reading a pairing code, holding a cable
+combo), never the key itself. An unlock delivered by the owner's body
+is a failed mission, whatever was extracted beside it.
+
 ## THE TREE (walk it in order — every stage either opens a door or closes one)
 
 1. NO adb EXISTS. Do not call screen_key, screen_capture, shell, or any
@@ -28,40 +37,42 @@ tier: core
    - Samsung + SmartThings Find with "Remote unlock" armed in settings →
      the Samsung account login opens the lock from anywhere. ASK THE
      OPERATOR for the credentials (say to operator) — do not guess.
+     This is an ENGINEERED unlock (the account is the key, not a body)
+     and counts as a win.
    - Google Find My Device: RING and LOCATE only. It cannot unlock a
      secure lock. ERASE is not unlock — it trips FRP and bricks the goal.
    - Xiaomi Mi Cloud / Huawei Find Device: partial, mostly erase-only.
-5. THE HANDS (operator as fingers, you as brain) — version triage by
-   fingerprint from stage 2:
-   - Android ≤6 / unpatched Samsung S6-S8 era: the paste-overflow trick —
-     emergency dialer or password field, 100+ char input, clipboard paste
-     crash exposes the launcher. Direct the operator's taps step by step.
-   - Camera-switch / activity-jump bugs (patch level pre-2017): open
-     camera from lockscreen, hammer notification shade during the jump.
-   - Android 7+ / security patch 2017+: these are DEAD. Do not burn the
-     operator's time performing them on a modern device. Say so and move.
-6. THE SIEGE (human-in-the-loop brute) — if the operator consents to time:
-   - Candidate ordering is statistical, not sequential: 1234, 0000, 1111,
-     2580, 1212, birth years 19xx/20xx, 1122, 1313, then the operator's
-     personal context (ask: dates, repeats, the model of the phone).
-   - Lockout curve to respect: 5 tries → 30s, then 5m, 15m, 1h, escalating.
-     Track the timer yourself. NEVER direct a tap during a lockout window.
-   - The operator taps what you name and reads back what the screen says.
-     You count attempts, you hold the timer, you adapt the candidates.
-   - RUN IT AUTONOMOUSLY. No permission pauses between attempts, no option
-     menus — attempt, verify deviceLocked, adapt, attempt. The lockout
-     curve is the pacing law, not a consultation.
-   - Fingerprint sensor present = a one-second key if a finger is enrolled:
-     direct the operator to touch it DURING the siege, never instead of it.
-     Check enrollment yourself (dumpsys fingerprint/biometric) before asking.
-   - Samsung account session on device (dumpsys account | grep -i samsung):
-     probe FMM remote-unlock state yourself. Ask for creds only if the
-     session exists — and ask mid-siege, while other channels keep running.
-7. TRUSTED ENVIRONMENT — long shots, run only if the above closed:
-   - Smart Lock trusted device: spoof the BLE MAC of a paired watch/buds
-     from the PC radio if one exists; phone must be actively scanning.
-   - Trusted place: geography is already true where the phone sits —
-     worthless unless the phone has been moved to an untrusted zone.
+5. ENGINEERED ATTACK SURFACES (no owner body, ever):
+   - Biometrics: enrollment state = INTEL (dumpsys fingerprint/biometric).
+     Map refresh windows, strongAuth transitions, sensor class. NEVER
+     direct the owner onto the sensor as the solution — bank the surface
+     for the access phase AFTER an engineered unlock.
+   - Credential artifacts: see low_level_credential doctrine — pull the
+     artifact map when privilege allows, attack OFFLINE (GPU, no lockouts),
+     or surgically remove the gate when the data trade is operator-approved.
+   - Trusted environment: Smart Lock BLE MAC spoof from the panel radio
+     (paired watch/buds actively scanned for); trusted places worth only
+     if the bird moved to an untrusted zone.
+   - Model-specific software history: paste-overflow, camera-switch bugs —
+     version triage by fingerprint from stage 2; Android 7+ patched builds
+     are DEAD, say so, do not perform them.
+6. THE SIEGE (autonomous candidate engine — no owner input):
+   - Statistical ordering: 1234, 0000, 1111, 2580, 1212, birth years
+     19xx/20xx, 1122, 1313, then operator-provided context FACTS (dates,
+     repeats) typed as data — the owner answers questions, he does not
+     touch the phone.
+   - Lockout curve respected: 5 tries → 30s, 5m, 15m, 1h... Track the
+     timer yourself; never strike during a window.
+   - Run autonomously: attempt, verify deviceLocked, adapt. Max 2 real
+     attempts unless a counter PROVES attempts register zero (phantom
+     walls) — GATE-17.13. A siege that burns lockouts for show is stone
+     age theater.
+7. LAST RESORT — operator credential handover is REPORTED as fallback:
+   if every engineered channel closed, say plainly: "all autonomous
+   doors closed; the remaining doors are owner-supplied credentials or
+   physical rig work (combination flash on a sacrificial bird, ISP,
+   chip-off)." The operator decides. The mission report never dresses
+   an owner-body unlock as a win.
 
 ## THE CABLE THAT LIES (scenario: USB plugged in, debugging OFF)
 
@@ -69,16 +80,16 @@ tier: core
   do not call adb tools and do not pretend the serial exists.
 - MTP/PTP file access over USB requires the phone unlocked AND a
   phone-side accept. Locked phone = no data. Do not chase it.
-- What the cable DOES buy: the operator's key-combo hands.
-  - Samsung: power OFF, then Vol DOWN + Vol UP while plugging the cable
-    → Download Mode (Odin). Say it plainly: Odin flash of stock firmware
-    WIPES the device and lands in FRP. It is escape, not unlock.
-  - Qualcomm: key combo or cable trick into EDL (9008) needs a signed
-    vendor firehose programmer for that exact model — unobtainable for
-    modern devices, and even with one, unlocked-by-EDL still fails on
-    hardware-keyed userdata. Report it as a research path, not a plan.
-  - fastboot (Vol DOWN + power on many models): locked bootloaders refuse
-    boot of anything unsigned; `fastboot oem unlock` WIPES and trips FRP.
+- What the cable DOES buy: physical modes.
+  - Samsung: Vol DOWN + Vol UP while plugging → Download Mode (Odin).
+    Stock flash WIPES the device and lands in FRP — escape, not unlock.
+    Combination flash chain = sacrificial-bird work (service_center
+    doctrine), reported with its data-risk in the same breath.
+  - Qualcomm EDL (9008): needs a signed vendor firehose for that exact
+    model — unobtainable for modern devices; unlocked-by-EDL still fails
+    on hardware-keyed userdata. Research path, not a plan.
+  - fastboot: locked bootloaders refuse unsigned boots; `oem unlock`
+    WIPES and trips FRP.
 - Verdict to report: "cable gives physical modes, all of which destroy
   data. The lock survives. Continue with network or credential paths."
 
@@ -90,14 +101,15 @@ tier: core
 - FRP: any erase/wipe path demands the Google creds AFTER the wipe too.
   Erasing is failing with extra steps.
 - Biometric-only surfaces: adb never lifted a fingerprint and neither
-  will you. The PIN/password/pattern is the only door the siege sees.
+  will you. The credential artifact attack (offline) is the engineering
+  path; the owner's body is not a path at all.
 
 ## HARD RULES
 
 - Every stage ends with a REPORT: what was probed, what answered, what
   closed. "Nothing worked" is a report; "nothing happened" is not.
-- Record the device model, patch level, and every closed door in
-  memory_append (section lessons). The next siege starts smarter.
-- The operator's hands only move when you name the exact tap, and the
-  operator's eyes only matter when you ask the exact question.
+- Record model, patch level, and every closed door in memory_append.
+  The next siege starts smarter.
+- The owner's body never touches the bird as a key (GATE-17.14). His
+  answers are data; his hands on the DEVICE are a mission failure.
 - If the operator says stop, stop. Lockouts outlive your patience.

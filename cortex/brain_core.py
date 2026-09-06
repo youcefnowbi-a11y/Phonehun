@@ -632,7 +632,41 @@ HOST_TOOLS = {
     "doctrine_read": lambda a: _doctrine_read((a or {}).get("name")),
     "host_shell":    lambda a: _host_shell((a or {}).get("command")),
     "page":          lambda a: _page((a or {}).get("name"), (a or {}).get("offset"), (a or {}).get("limit")),
+    # ── VESPER v6 STAGE 2 — the evidence harness (cortex/evidence.py) ──
+    # GATE-18.2: no unlock verdict without the three-part proof. Snapshots
+    # are read-only; the diff engine is the truth serum; the ledger is the
+    # only admissible record of what happened.
+    "evidence_begin":  lambda a: _evidence().begin_mission(
+                            (a or {}).get("mission_id") or f"m_{time.strftime('%Y%m%d_%H%M%S')}",
+                            (a or {}).get("objective")),
+    "state_snapshot":  lambda a: _evidence().state_snapshot(
+                            _snap_exec, tag=(a or {}).get("tag") or "manual",
+                            serial=(a or {}).get("serial")),
+    "state_diff":      lambda a: _evidence().state_diff(
+                            (a or {}).get("tag_before"), (a or {}).get("tag_after")),
+    "unlock_proof":    lambda a: _evidence().unlock_proof(_snap_exec, (a or {}).get("frame_path")),
+    "evidence_read":   lambda a: _evidence().read_ledger((a or {}).get("mission_id")),
+    "evidence_end":    lambda a: _evidence().end_mission((a or {}).get("final_text")),
 }
+
+
+def _evidence():
+    """Lazy import — the harness must never break the belt if absent."""
+    from cortex import evidence
+    return evidence
+
+
+def _snap_exec(cmd):
+    """Read-only shell runner for snapshots/proofs — same lane as `shell`
+    but only ever used for the dumpsys/settings reads the harness names."""
+    try:
+        ep = _TOOL_MAP.get("shell", {}).get("ep")
+        r = requests.post(PANEL + ep, headers={"X-API-Token": _token()},
+                          json={"command": cmd}, timeout=60)
+        res = r.json() if r.headers.get("Content-Type", "").startswith("application/json") else {"raw": r.text[:2000]}
+        return res if isinstance(res, dict) else {"stdout": str(res)[:4000]}
+    except Exception as e:
+        return {"error": f"snapshot exec failed: {e!r}"}
 
 TOOLS = [
     # ── mind: memory, manual, ledger, doctrine ──
@@ -663,6 +697,19 @@ TOOLS = [
     # ── hands on the panel machine ──
     dict(name="host_shell", desc="PowerShell on the PANEL machine (not the phone). Reboot the panel, parse files, run python. Your hands on the house.",
          p=_obj(command=S[0])),
+    # ── VESPER v6 STAGE 2 — evidence harness (GATE-18.2) ──
+    dict(name="evidence_begin", desc="Open the hash-chained evidence ledger for this mission (GATE-18.2). Call at mission start when the objective touches a bird's lock state.",
+         p=_obj(mission_id=S[0], objective=S[0])),
+    dict(name="state_snapshot", desc="Snapshot the lock-relevant state plane (keyguard bits, trust, biometric, lock_settings, settings rows) — read-only. Tag it (e.g. before/after an action).",
+         p=_obj(tag=S[0], serial=S[0])),
+    dict(name="state_diff", desc="Diff two snapshots by tag. ZERO-DELTA after a state_write = THEATER (your write did nothing — rotate fronts). CHANGED = progress, a graph edge for the compiler.",
+         p=_obj(tag_before=S[0], tag_after=S[0])),
+    dict(name="unlock_proof", desc="THE CROWN'S TRUTH LAW: the three-part unlock proof (keyguard-bit diff + lockout delta + screen frame). No final report may claim an unlock without this verdict = UNLOCK-PROVEN.",
+         p=_obj(frame_path=S[0])),
+    dict(name="evidence_read", desc="Read a mission's evidence ledger (hash chain verified) — events, unlock_proven, mismatches.",
+         p=_obj(mission_id=S[0])),
+    dict(name="evidence_end", desc="Close the mission's evidence chain; runs the narration-vs-ledger mismatch detector on your final text.",
+         p=_obj(final_text=S[0])),
     # ── device & identity ──
     dict(name="list_devices", desc="List attached Android devices (USB/ADB) with state: device/unauthorized/offline.",
          ep="/api/devices", m="GET", p=_obj()),

@@ -27,3 +27,7 @@ rust/h264core/target/
 cortex/tool_stats.json
 
 _operator_vault/
+
+# ── VESPER v6 runtime state (local paths + hashes — like .api_token) ──
+cortex/armory/
+cortex/evidence/

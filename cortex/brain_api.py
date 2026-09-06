@@ -111,6 +111,46 @@ def brain_say():
     return jsonify({"success": ok, "message": resp}), (200 if ok else 409)
 
 
+# ── VESPER v6 STAGE 1 — registry danger gates + operator sign-off ────────────
+# The cortex's dispatch gate lives in cortex/registry.py; these routes are the
+# cockpit's hands on that gate. Destructive/flash calls park with a signoff_id;
+# the operator approves here and the retried call fires exactly once.
+
+@brain_bp.route("/signoffs", methods=["GET"])
+def brain_signoffs():
+    return jsonify({"success": True,
+                    "pending": brain_core.registry.pending_signoffs()})
+
+
+@brain_bp.route("/signoff/approve", methods=["POST"])
+def brain_signoff_approve():
+    data = request.get_json(silent=True) or {}
+    sid = (data.get("signoff_id") or "").strip()
+    if not sid:
+        return jsonify({"success": False, "error": "signoff_id required"}), 400
+    ok, msg = brain_core.registry.approve_signoff(sid)
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 404)
+
+
+@brain_bp.route("/signoff/decline", methods=["POST"])
+def brain_signoff_decline():
+    data = request.get_json(silent=True) or {}
+    sid = (data.get("signoff_id") or "").strip()
+    if not sid:
+        return jsonify({"success": False, "error": "signoff_id required"}), 400
+    ok, msg = brain_core.registry.decline_signoff(sid)
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 404)
+
+
+@brain_bp.route("/registry", methods=["GET"])
+def brain_registry():
+    reg = brain_core.registry.load_registry()
+    tools = [{"name": t.get("name"), "plane": t.get("plane"),
+              "danger_class": t.get("danger_class"), "interface": t.get("interface")}
+             for t in reg.get("tools", [])]
+    return jsonify({"success": True, "count": len(tools), "tools": tools})
+
+
 @brain_bp.route("/memory", methods=["GET"])
 def brain_memory():
     """Serve Vesper's live memory organs: casefile, lessons, identity, skills."""

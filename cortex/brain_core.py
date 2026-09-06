@@ -872,6 +872,22 @@ def _exec_tool(name, args):
     if not t:
         return {"error": f"unknown tool {name}"}
     args = dict(args or {})
+    # ── VESPER v6 STAGE 1 — the danger gate (registry.py) ────────────────
+    # read_only/state_write pass; destructive/flash park with a signoff_id
+    # the operator approves via /api/brain/signoff/approve. The cortex sees
+    # the block as a TOOL_ERROR it must report — never a wall to sneak past.
+    try:
+        from cortex import registry as _registry
+        verdict, eff_class, _row = _registry.gate(name, args)
+        if not verdict.get("ok"):
+            return {"error": verdict.get("reason", "gate blocked"),
+                    "signoff_id": verdict.get("signoff_id"),
+                    "danger_class": verdict.get("danger_class"),
+                    "gate": "v6-stage1",
+                    "hint": "report the sign-off request to the operator inbox and continue other fronts"}
+    except Exception as _ge:
+        # The gate must never break dispatch — belt keeps moving if it fails.
+        _record_stat("registry_gate", False)
     if name in HOST_TOOLS:
         try:
             res = HOST_TOOLS[name](args)

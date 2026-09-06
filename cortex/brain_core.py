@@ -647,7 +647,41 @@ HOST_TOOLS = {
     "unlock_proof":    lambda a: _evidence().unlock_proof(_snap_exec, (a or {}).get("frame_path")),
     "evidence_read":   lambda a: _evidence().read_ledger((a or {}).get("mission_id")),
     "evidence_end":    lambda a: _evidence().end_mission((a or {}).get("final_text")),
+    # ── VESPER v6 STAGE 3 — intake classifier (cortex/intake.py) ──
+    # The FIRST triage: BFU/AFU/authorized decided mechanically from the
+    # bird's own state bits before any front is ranked (arrival state is
+    # 80% of the outcome — door map §6).
+    "intake_classify": lambda a: _intake_classify(a or {}),
 }
+
+
+def _intake_classify(args):
+    """Lazy harness — classify the attached bird mechanically."""
+    from cortex import intake
+    devs = {}
+    try:
+        devs = _exec_tool("list_devices", {})
+    except Exception:
+        pass
+    adb_state = args.get("adb_state")
+    if not adb_state and isinstance(devs, dict):
+        dl = devs.get("devices") or []
+        if dl:
+            adb_state = dl[0].get("status") or dl[0].get("state")
+    try:
+        res = intake.classify(_snap_exec, list_devices_result=devs,
+                              adb_state=adb_state, serial=args.get("serial"))
+        # intake rides the evidence chain when one is open
+        try:
+            ev = _evidence()
+            if ev._MISSION_STATE.get("mission_id"):
+                ev._event("intake", {"verdict": res.get("verdict"),
+                                     "facts": res.get("facts")})
+        except Exception:
+            pass
+        return res
+    except Exception as e:
+        return {"error": f"intake failed: {e!r}"}
 
 
 def _evidence():
@@ -710,6 +744,9 @@ TOOLS = [
          p=_obj(mission_id=S[0])),
     dict(name="evidence_end", desc="Close the mission's evidence chain; runs the narration-vs-ledger mismatch detector on your final text.",
          p=_obj(final_text=S[0])),
+    # ── VESPER v6 STAGE 3 — intake classifier ──
+    dict(name="intake_classify", desc="THE FIRST TRIAGE: mechanically classify the attached bird (AFU-UNLOCKED / AFU-LOCKED / BFU / INSECURE / UNAUTHORIZED / NO-ADB) from its own state bits, and get the honest front order that verdict implies. Call this BEFORE walking any door — arrival state is 80% of the outcome.",
+         p=_obj(serial=S[0], adb_state=S[0])),
     # ── device & identity ──
     dict(name="list_devices", desc="List attached Android devices (USB/ADB) with state: device/unauthorized/offline.",
          ep="/api/devices", m="GET", p=_obj()),

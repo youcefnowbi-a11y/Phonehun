@@ -652,7 +652,20 @@ HOST_TOOLS = {
     # bird's own state bits before any front is ranked (arrival state is
     # 80% of the outcome — door map §6).
     "intake_classify": lambda a: _intake_classify(a or {}),
+    # ── VESPER v6 STAGE 5 — the armory (cortex/armory.py) ──
+    # Manifest-first law: what runs is what was verified. You may consult
+    # verdicts; acquisitions are ARMORY TASKS, never mid-mission fetches.
+    "list_armory":      lambda a: _armory().list_armory(plane=(a or {}).get("plane"),
+                                                          status_filter=(a or {}).get("status")),
+    "armory_request":   lambda a: _armory().request_tool((a or {}).get("name") or ""),
+    "armory_integrity": lambda a: _armory().integrity_scan(),
 }
+
+
+def _armory():
+    """Lazy armory import — same never-break-the-belt law."""
+    from cortex import armory
+    return armory
 
 
 def _intake_classify(args):
@@ -747,6 +760,13 @@ TOOLS = [
     # ── VESPER v6 STAGE 3 — intake classifier ──
     dict(name="intake_classify", desc="THE FIRST TRIAGE: mechanically classify the attached bird (AFU-UNLOCKED / AFU-LOCKED / BFU / INSECURE / UNAUTHORIZED / NO-ADB) from its own state bits, and get the honest front order that verdict implies. Call this BEFORE walking any door — arrival state is 80% of the outcome.",
          p=_obj(serial=S[0], adb_state=S[0])),
+    # ── VESPER v6 STAGE 5 — the armory ──
+    dict(name="list_armory", desc="List the armory manifest with live verification states (INSTALLED/MISSING/DRIFTED/ACQUISITION-NEEDED). What runs is what was verified.",
+         p=_obj(plane=S[0], status=S[0])),
+    dict(name="armory_request", desc="Ask the armory to vouch for a tool: returns INSTALLED + entry points, or the acquisition verdict. The armory NEVER vouches for an unverified binary.",
+         p=_obj(name=S[0])),
+    dict(name="armory_integrity", desc="Full armory integrity sweep — every manifest row verified (hash drift detection).",
+         p=_obj()),
     # ── device & identity ──
     dict(name="list_devices", desc="List attached Android devices (USB/ADB) with state: device/unauthorized/offline.",
          ep="/api/devices", m="GET", p=_obj()),
